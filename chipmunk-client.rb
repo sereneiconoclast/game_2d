@@ -7,12 +7,14 @@
 ## See https://github.com/jlnr/gosu/wiki/Ruby-Chipmunk-Integration for the accompanying text.
 
 require 'rubygems'
-require 'json'
 require 'gosu'
 require 'chipmunk'
-require 'rev'
-require 'socket'
-require 'thread'
+
+$LOAD_PATH << '.'
+require 'networking'
+require 'player'
+require 'star'
+require 'zorder'
 
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 480
@@ -26,7 +28,7 @@ PORT = 4321
 # The Player ship can get going so fast as to "move through" a
 # star without triggering a collision; an increased number of
 # Chipmunk step calls per update will effectively avoid this issue
-SUBSTEPS = 6
+$SUBSTEPS = 6
 
 # Convenience method for converting from radians to a Vec2 vector.
 class Numeric
@@ -35,121 +37,67 @@ class Numeric
   end
 end
 
-# Layering of sprites
-module ZOrder
-  Background, Stars, Player, UI = *0..3
-end
+class ClientConnection < Networking
+  attr_reader :player_name
 
-# This game will have one Player in the form of a ship
-class Player
-  attr_reader :shape
-
-  def initialize(window, shape)
-    @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
-    @shape = shape
-    @shape.body.p = CP::Vec2.new(0.0, 0.0) # position
-    @shape.body.v = CP::Vec2.new(0.0, 0.0) # velocity
-    
-    # Keep in mind that down the screen is positive y, which means that PI/2 radians,
-    # which you might consider the top in the traditional Trig unit circle sense is actually
-    # the bottom; thus 3PI/2 is the top
-    @shape.body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
-  end
-  
-  # Directly set the position of our Player
-  def warp(x, y)
-    puts "Warping to #{x}x#{y}"
-    @shape.body.p = CP::Vec2.new(x, y)
-  end
-  
-  # Apply negative Torque; Chipmunk will do the rest
-  # SUBSTEPS is used as a divisor to keep turning rate constant
-  # even if the number of steps per update are adjusted
-  def turn_left
-    @shape.body.t -= 40000.0/SUBSTEPS
-  end
-  
-  # Apply positive Torque; Chipmunk will do the rest
-  # SUBSTEPS is used as a divisor to keep turning rate constant
-  # even if the number of steps per update are adjusted
-  def turn_right
-    @shape.body.t += 40000.0/SUBSTEPS
-  end
-  
-  # Apply forward force; Chipmunk will do the rest
-  # SUBSTEPS is used as a divisor to keep acceleration rate constant
-  # even if the number of steps per update are adjusted
-  # Here we must convert the angle (facing) of the body into
-  # forward momentum by creating a vector in the direction of the facing
-  # and with a magnitude representing the force we want to apply
-  def accelerate
-    @shape.body.apply_force((@shape.body.a.radians_to_vec2 * (3000.0/SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
-  end
-  
-  # Apply even more forward force
-  # See accelerate for more details
-  def boost
-    @shape.body.apply_force((@shape.body.a.radians_to_vec2 * (3000.0)), CP::Vec2.new(0.0, 0.0))
-  end
-  
-  # Apply reverse force
-  # See accelerate for more details
-  def reverse
-    @shape.body.apply_force(-(@shape.body.a.radians_to_vec2 * (1000.0/SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
-  end
-  
-  def draw
-    @image.draw_rot(@shape.body.p.x, @shape.body.p.y, ZOrder::Player, @shape.body.a.radians_to_gosu)
-  end
-end
-
-# See how simple our Star is?
-# Of course... it just sits around and looks good...
-class Star
-  attr_reader :shape
-  
-  def initialize(animation, shape)
-    @animation = animation
-    @color = Gosu::Color.new(0xff000000)
-    @color.red = rand(255 - 40) + 40
-    @color.green = rand(255 - 40) + 40
-    @color.blue = rand(255 - 40) + 40
-    @shape = shape
-    @shape.body.p = CP::Vec2.new(rand * WORLD_WIDTH, rand * WORLD_HEIGHT) # position
-    @shape.body.v = CP::Vec2.new(0.0, 0.0) # velocity
-    @shape.body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+  def self.connect(host, port, *args)
+    super
   end
 
-  def draw  
-    img = @animation[Gosu::milliseconds / 100 % @animation.size];
-    img.draw(@shape.body.p.x - img.width / 2.0, @shape.body.p.y - img.height / 2.0, ZOrder::Stars, 1, 1, @color, :add)
+  def setup(game, player_name)
+    @game = game
+    @player_name = player_name
+    self
+  end
+
+  def on_connect
+    super
+    puts "Connected to server #{remote_addr}:#{remote_port}; sending handshake"
+    send_record :handshake => { :player_name => @player_name }
+  end
+
+  def on_close
+    puts "Client disconnected"
+    @game.close
+  end
+
+  def on_record(hash)
+    player_vector = hash['player_vector']
+    @game.set_player_vector(*player_vector) if player_vector
+
+    stars = hash['add_stars']
+    @game.add_stars(stars) if stars
   end
 end
 
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
+
   def initialize(player_name)
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Gosu & Chipmunk Integration Demo"
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
 
+    # Load star animation using window
+    ClientStar.load_animation(self)
+
     # Put the beep here, as it is the environment now that determines collision
     @beep = Gosu::Sample.new(self, "media/Beep.wav")
-    
+
     # Put the score here, as it is the environment that tracks this now
     @score = 0
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
-    
+
     # Time increment over which to apply a physics "step" ("delta t")
     @dt = (1.0/60.0)
-    
+
     # Create our Space and set its damping
     # A damping of 0.8 causes the ship bleed off its force and torque over time
     # This is not realistic behavior in a vacuum of space, but it gives the game
     # the feel I'd like in this situation
     @space = CP::Space.new
-    # @space.damping = 0.8    
+    # @space.damping = 0.8
     @space.gravity = CP::Vec2.new(0.0, 10.0)
 
     # Walls all around the screen
@@ -157,50 +105,9 @@ class GameWindow < Gosu::Window
     add_bounding_wall(WORLD_WIDTH / 2, WORLD_HEIGHT, WORLD_WIDTH, 0.0) # bottom
     add_bounding_wall(0.0, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT)   # left
     add_bounding_wall(WORLD_WIDTH, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT) # right
-    
-    @from_server = Queue.new
 
-    @socket = TCPSocket.new HOSTNAME, PORT
-    @read_thread = Thread.new do
-      loop do
-        bytes = @socket.recv(4)
-        raise "Connection closed by server after #{bytes.size} bytes (expected header of 4)" unless bytes.size == 4
-        len = bytes.unpack("N").first
-        bytes = @socket.recv(len)
-        raise "Connection closed by server after #{bytes.size} bytes (expected #{len})" unless bytes.size == len
-        json = JSON.parse(bytes)
-        puts "Got: #{json.inspect}"
-        @from_server << json
-      end
-    end
-
-    # Create the Body for the Player
-    body = CP::Body.new(10.0, 150.0)
-    
-    # In order to create a shape, we must first define it
-    # Chipmunk defines 3 types of Shapes: Segments, Circles and Polys
-    # We'll use s simple, 4 sided Poly for our Player (ship)
-    # You need to define the vectors so that the "top" of the Shape is towards 0 radians (the right)
-    shape_array = [CP::Vec2.new(-25.0, -25.0), CP::Vec2.new(-25.0, 25.0), CP::Vec2.new(25.0, 1.0), CP::Vec2.new(25.0, -1.0)]
-    shape = CP::Shape::Poly.new(body, shape_array, CP::Vec2.new(0,0))
-    
-    # The collision_type of a shape allows us to set up special collision behavior
-    # based on these types.  The actual value for the collision_type is arbitrary
-    # and, as long as it is consistent, will work for us; of course, it helps to have it make sense
-    shape.collision_type = :ship
-
-    shape.e = 0.50 # elasticity
-    
-    @space.add_body(body)
-    @space.add_shape(shape)
-
-    @player = Player.new(self, shape)
-    read_location
-    set_camera_position
-    
-    @star_anim = Gosu::Image::load_tiles(self, "media/Star.png", 25, 25, false)
     @stars = Array.new
-        
+
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # I create a @remove_shapes array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
@@ -218,15 +125,26 @@ class GameWindow < Gosu::Window
         # remember to return 'true' if we want regular collision handling
       end
     end
+
+    # Connect to server and kick off handshaking
+    # We will create our player object only after we've been accepted by the server
+    # and told our starting position
+    @conn = connect_to_server HOSTNAME, PORT, player_name
   end
 
-  def read_location
-    begin
-      json = @from_server.pop
-      player_pos = json['player_pos']
-      @player.warp(player_pos['x'], player_pos['y'])
-    rescue Errno::EAGAIN
+  def connect_to_server(hostname, port, player_name)
+    conn = ClientConnection.connect(hostname, port)
+    conn.attach(Rev::Loop.default)
+    conn.setup(self, player_name)
+  end
+
+  def set_player_vector(x, y, vel_x, vel_y)
+    unless @player
+      @player = ClientPlayer.new(@conn, @conn.player_name, self)
+      @space.add_body(@player.body)
+      @space.add_shape(@player.shape)
     end
+    @player.warp(x, y, vel_x, vel_y)
   end
 
   def set_camera_position
@@ -250,8 +168,11 @@ class GameWindow < Gosu::Window
   end
 
   def update
-    # Step the physics environment SUBSTEPS times each update
-    SUBSTEPS.times do
+    # Handle any pending Rev events
+    Rev::Loop.default.run_nonblock
+
+    # Step the physics environment $SUBSTEPS times each update
+    $SUBSTEPS.times do
       # This iterator makes an assumption of one Shape per Star making it safe to remove
       # each Shape's Body as it comes up
       # If our Stars had multiple Shapes, as would be required if we were to meticulously
@@ -265,58 +186,60 @@ class GameWindow < Gosu::Window
         @space.remove_shape(shape)
       end
       @remove_shapes.clear # clear out the shapes for next pass
-      
-      # When a force or torque is set on a Body, it is cumulative
-      # This means that the force you applied last SUBSTEP will compound with the
-      # force applied this SUBSTEP; which is probably not the behavior you want
-      # We reset the forces on the Player each SUBSTEP for this reason
-      @player.shape.body.reset_forces
-      
-      # If our rotation gets crazy-high, slow it down
-      # Otherwise allow the player to adjust it
-      if @player.shape.body.w > 1.0
-        @player.turn_left
-      elsif @player.shape.body.w < -1.0
-        @player.turn_right
-      # Check keyboard
-      elsif button_down? Gosu::KbLeft
-        @player.turn_left
-      elsif button_down? Gosu::KbRight
-        @player.turn_right
-      end
-      
-      if button_down? Gosu::KbUp
-        if ( (button_down? Gosu::KbRightShift) || (button_down? Gosu::KbLeftShift) )
-          @player.boost
-        else
-          @player.accelerate
+
+      if @player
+        # When a force or torque is set on a Body, it is cumulative
+        # This means that the force you applied last SUBSTEP will compound with the
+        # force applied this SUBSTEP; which is probably not the behavior you want
+        # We reset the forces on the Player each SUBSTEP for this reason
+        @player.shape.body.reset_forces
+
+        # If our rotation gets crazy-high, slow it down
+        # Otherwise allow the player to adjust it
+        if @player.shape.body.w > 1.0
+          @player.turn_left
+        elsif @player.shape.body.w < -1.0
+          @player.turn_right
+        # Check keyboard
+        elsif button_down? Gosu::KbLeft
+          @player.turn_left
+        elsif button_down? Gosu::KbRight
+          @player.turn_right
         end
-      elsif button_down? Gosu::KbDown
-        @player.reverse
+
+        if button_down? Gosu::KbUp
+          if ( (button_down? Gosu::KbRightShift) || (button_down? Gosu::KbLeftShift) )
+            @player.boost
+          else
+            @player.accelerate
+          end
+        elsif button_down? Gosu::KbDown
+          @player.reverse
+        end
       end
-      
+
       # Perform the step over @dt period of time
       # For best performance @dt should remain consistent for the game
       @space.step(@dt)
     end
-    
-    # Each update (not SUBSTEP) we see if we need to add more Stars
-    if rand(100) < 4 and @stars.size < 25 then
-      body = CP::Body.new(0.0001, 0.0001)
-      shape = CP::Shape::Circle.new(body, 25/2, CP::Vec2.new(0.0, 0.0))
-      shape.collision_type = :star
+  end
 
-      shape.e = 0.99 # elasticity
-      
-      @space.add_body(body)
-      @space.add_shape(shape)
-      
-      @stars.push(Star.new(@star_anim, shape))
-    end
+  def add_star(x, y, x_vel, y_vel)
+    star = ClientStar.new(x, y, x_vel, y_vel)
+    @space.add_body(star.body)
+    @space.add_shape(star.shape)
+
+    @stars << star
+  end
+
+  def add_stars(star_array)
+    puts "Adding #{star_array.size} stars"
+    star_array.each {|args| add_star(*args) }
   end
 
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
+    return unless @player
     set_camera_position
     translate(-@camera_x, -@camera_y) do
       @player.draw

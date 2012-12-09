@@ -3,10 +3,11 @@ require 'gosu'
 require 'zorder'
 
 class Player
-  attr_reader :conn, :body, :shape
+  attr_reader :conn, :player_name, :body, :shape
 
-  def initialize(conn)
+  def initialize(conn, player_name)
     @conn = conn
+    @player_name = player_name
 
     # Create the Body for the Player
     @body = CP::Body.new(10.0, 150.0)
@@ -39,10 +40,12 @@ class Player
     @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
   end
 
-  # Directly set the position of our Player
-  def warp(x, y)
-    puts "Warping to #{x}x#{y}"
+  # Directly set the position and velocity of our Player
+  def warp(x, y, x_vel=0.0, y_vel=0.0)
+    puts "Warping to #{x}x#{y} going #{x_vel}x#{y_vel}"
     @body.p = CP::Vec2.new(x, y)
+    @body.v = CP::Vec2.new(x_vel, y_vel)
+    @body.activate
   end
 
   # Apply negative Torque; Chipmunk will do the rest
@@ -83,8 +86,8 @@ class Player
 end
 
 class ClientPlayer < Player
-  def initialize(conn, window)
-    super(conn)
+  def initialize(conn, player_name, window)
+    super(conn, player_name)
     @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
   end
 
