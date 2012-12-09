@@ -11,7 +11,7 @@ class EchoServerConnection < Networking
   attr_reader :player_name
 
   def setup(game)
-    puts "#{object_id} -- #{remote_addr}:#{remote_port} connected.  Waiting for handshake"
+    puts "setup(): #{remote_addr}:#{remote_port} connected.  Waiting for handshake"
     @game = game
   end
 

@@ -30,8 +30,9 @@ $SUBSTEPS = 6
 class PlayerConnection < Networking
 
   def setup(game)
-    puts "#{object_id} -- #{remote_addr}:#{remote_port} connected"
     @game = game
+    @remote_addr, @remote_port = remote_addr, remote_port
+    puts "setup(): #{@remote_addr}:#{@remote_port} connected"
   end
 
   def answer_handshake(handshake)
@@ -42,7 +43,7 @@ class PlayerConnection < Networking
       'player_vector' => [ @player.body.p.x, @player.body.p.y, @player.body.v.x, @player.body.v.y ],
       'add_stars' => @game.get_all_star_vectors
     }
-    puts "Answering handshake from #{player_name}: #{response.inspect}"
+    puts "#{player_name} logs in from #{@remote_addr}:#{@remote_port}"
     send_record response
   end
 
@@ -50,7 +51,7 @@ class PlayerConnection < Networking
     puts "#{object_id} -- #{remote_addr}:#{remote_port} disconnected"
   end
 
-  def on_read(data)
+  def on_record(data)
     if (handshake = data['handshake'])
       answer_handshake(handshake)
     else
