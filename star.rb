@@ -19,7 +19,9 @@ class Star
 end
 
 class ClientStar < Star
-  @@animation = Gosu::Image::load_tiles(self, "media/Star.png", 25, 25, false)
+  def self.load_animation(window)
+    @@animation = Gosu::Image::load_tiles(window, "media/Star.png", 25, 25, false)
+  end
 
   def initialize(x, y, x_vel, y_vel)
     super(x, y, x_vel, y_vel)
