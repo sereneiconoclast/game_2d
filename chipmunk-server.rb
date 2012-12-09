@@ -8,9 +8,9 @@
 
 require 'rubygems'
 require 'gosu'
-require 'chipmunk'
 
 $LOAD_PATH << '.'
+require 'chipmunk_utilities'
 require 'networking'
 require 'player'
 require 'star'
@@ -40,15 +40,19 @@ class PlayerConnection < Networking
     @player = @game.add_player(self, player_name)
 
     response = {
-      'player_vector' => [ @player.body.p.x, @player.body.p.y, @player.body.v.x, @player.body.v.y ],
+      'player_vector' => @player.body.game_vector,
       'add_stars' => @game.get_all_star_vectors
     }
     puts "#{player_name} logs in from #{@remote_addr}:#{@remote_port}"
     send_record response
   end
 
+  def add_star(star)
+    send_record 'add_stars' => [ star.body.game_vector ]
+  end
+
   def on_close
-    puts "#{object_id} -- #{remote_addr}:#{remote_port} disconnected"
+    puts "#{@player.player_name} -- #{@remote_addr}:#{@remote_port} disconnected"
   end
 
   def on_record(data)
@@ -57,13 +61,6 @@ class PlayerConnection < Networking
     else
       puts "TODO TODO TODO..."
     end
-  end
-end
-
-# Convenience method for converting from radians to a Vec2 vector.
-class Numeric
-  def radians_to_vec2
-    CP::Vec2.new(Math::cos(self), Math::sin(self))
   end
 end
 
@@ -125,7 +122,7 @@ class Game < Rev::TimerWatcher
     $space.add_shape(shape)
   end
 
-  def add_player(player_name, conn)
+  def add_player(conn, player_name)
     player = Player.new(conn, player_name)
     $space.add_body(player.body)
     $space.add_shape(player.shape)
@@ -136,7 +133,7 @@ class Game < Rev::TimerWatcher
   end
 
   def get_all_star_vectors
-    @stars.collect {|s| [s.body.p.x, s.body.p.y, s.body.v.x, s.body.v.y] }
+    @stars.collect {|s| s.body.game_vector }
   end
 
   def on_timer
@@ -161,13 +158,13 @@ class Game < Rev::TimerWatcher
       # force applied this SUBSTEP; which is probably not the behavior you want
       # We reset the forces on the Player each SUBSTEP for this reason
       @players.each do |p|
-        p.shape.body.reset_forces
+        p.body.reset_forces
       
         # If our rotation gets crazy-high, slow it down
         # Otherwise allow the player to adjust it
-        if p.shape.body.w > 1.0
+        if p.body.w > 1.0
           p.turn_left
-        elsif p.shape.body.w < -1.0
+        elsif p.body.w < -1.0
           p.turn_right
         end
       end
@@ -183,6 +180,7 @@ class Game < Rev::TimerWatcher
       $space.add_body(star.body)
       $space.add_shape(star.shape)
       @stars << star
+      @players.each {|p| p.conn.add_star star }
     end
   end
 end

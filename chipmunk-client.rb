@@ -8,9 +8,9 @@
 
 require 'rubygems'
 require 'gosu'
-require 'chipmunk'
 
 $LOAD_PATH << '.'
+require 'chipmunk_utilities'
 require 'networking'
 require 'player'
 require 'star'
@@ -29,13 +29,6 @@ PORT = 4321
 # star without triggering a collision; an increased number of
 # Chipmunk step calls per update will effectively avoid this issue
 $SUBSTEPS = 6
-
-# Convenience method for converting from radians to a Vec2 vector.
-class Numeric
-  def radians_to_vec2
-    CP::Vec2.new(Math::cos(self), Math::sin(self))
-  end
-end
 
 class ClientConnection < Networking
   attr_reader :player_name
