@@ -22,22 +22,25 @@ class Networking < Rev::TCPSocket
   def on_read(data)
     #puts "Received #{data.size} bytes"
     @network_buffer << data
-    avail = @network_buffer.size
-    if avail < 4
-      puts "Only #{avail} bytes in buffer, header incomplete"
-      return nil
-    end
-    len = @network_buffer[0...4].unpack("N").first
-    if avail < (4 + len)
-      puts "Only #{avail} bytes in buffer, record incomplete"
-      return nil
-    end
 
-    #puts "Consuming header plus #{len} bytes"
-    bytes = @network_buffer.slice!(0...(4 + len))
-    json = JSON.parse(bytes[4..-1])
-    #puts "Got: #{json.inspect}"
-    on_record json
+    until @network_buffer.empty?
+      avail = @network_buffer.size
+      if avail < 4
+        puts "Only #{avail} bytes in buffer, header incomplete"
+        return nil
+      end
+      len = @network_buffer[0...4].unpack("N").first
+      if avail < (4 + len)
+        puts "Only #{avail} bytes in buffer, record incomplete"
+        return nil
+      end
+
+      #puts "Consuming header plus #{len} bytes"
+      bytes = @network_buffer.slice!(0...(4 + len))
+      json = JSON.parse(bytes[4..-1])
+      #puts "Got: #{json.inspect}"
+      on_record json
+    end
   end
 
   def [](*args)

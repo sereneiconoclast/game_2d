@@ -6,10 +6,12 @@ require 'registerable'
 class Player
   include Registerable
   attr_reader :conn, :player_name, :body, :shape
+  attr_writer :move
 
   def initialize(conn, player_name)
     @conn = conn
     @player_name = player_name
+    @move = nil
 
     # Create the Body for the Player
     @body = CP::Body.new(10.0, 150.0)
@@ -87,6 +89,20 @@ class Player
     @body.apply_force(-(@body.a.radians_to_vec2 * (1000.0/$SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
   end
 
+  def process_move
+    return unless %w(turn_left turn_right accelerate boost reverse).include? @move
+    send @move.to_sym
+    @move = nil
+  end
+
+  # When a force or torque is set on a Body, it is cumulative
+  # This means that the force you applied last SUBSTEP will compound with the
+  # force applied this SUBSTEP; which is probably not the behavior you want
+  # We reset the forces on the Player each SUBSTEP for this reason
+  def reset_for_next_move
+    @body.reset_forces
+  end
+
   def to_s
     "#{player_name} (#{registry_id})"
   end
@@ -105,9 +121,19 @@ class Player
       :velocity => [ @body.v.x, @body.v.y ]
     }
   end
+
+  def update_from_json(json)
+    # Player name updates?
+    x, y = json['position']
+    x_vel, y_vel = json['velocity']
+    @body.p = CP::Vec2.new(x, y) # position
+    @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
+  end
 end
 
 class ClientPlayer < Player
+  attr_reader :move
+
   def initialize(conn, player_name, window)
     super(conn, player_name)
     @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
@@ -115,5 +141,35 @@ class ClientPlayer < Player
 
   def draw
     @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Player, @body.a.radians_to_gosu)
+  end
+
+  def reset_for_next_move
+    super
+    @move = nil
+  end
+
+  def turn_left(automatic = false)
+    super()
+    @move = :turn_left unless automatic
+  end
+
+  def turn_right(automatic = false)
+    super()
+    @move = :turn_right unless automatic
+  end
+
+  def boost
+    super
+    @move = :boost
+  end
+
+  def accelerate
+    super
+    @move = :accelerate
+  end
+
+  def reverse
+    super
+    @move = :reverse
   end
 end

@@ -66,6 +66,10 @@ class ClientConnection < Networking
     registry = hash['registry']
     @game.sync_registry(registry) if registry
   end
+
+  def send_move(move)
+    send_record(:move => move.to_s) if move
+  end
 end
 
 # The Gosu::Window is always the "environment" of our game
@@ -154,8 +158,8 @@ class GameWindow < Gosu::Window
   end
 
   def set_camera_position
-    @camera_x = [[@player.shape.body.p.x - SCREEN_WIDTH/2, 0].max, WORLD_WIDTH - SCREEN_WIDTH].min
-    @camera_y = [[@player.shape.body.p.y - SCREEN_HEIGHT/2, 0].max, WORLD_HEIGHT - SCREEN_HEIGHT].min
+    @camera_x = [[@player.body.p.x - SCREEN_WIDTH/2, 0].max, WORLD_WIDTH - SCREEN_WIDTH].min
+    @camera_y = [[@player.body.p.y - SCREEN_HEIGHT/2, 0].max, WORLD_HEIGHT - SCREEN_HEIGHT].min
   end
 
   def add_bounding_wall(x_pos, y_pos, width, height)
@@ -180,26 +184,24 @@ class GameWindow < Gosu::Window
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
       @remove_stars.each do |star|
+        # We may have just removed this star after a registry update
+        next unless @registry.delete star.registry_id
+
         @stars.delete star
         @space.remove_body(star.body)
         @space.remove_shape(star.shape)
-        raise "Star #{star} not in registry" unless @registry.delete star.registry_id
       end
       @remove_stars.clear # clear out the stars for next pass
 
       if @player
-        # When a force or torque is set on a Body, it is cumulative
-        # This means that the force you applied last SUBSTEP will compound with the
-        # force applied this SUBSTEP; which is probably not the behavior you want
-        # We reset the forces on the Player each SUBSTEP for this reason
-        @player.shape.body.reset_forces
+        @player.reset_for_next_move
 
         # If our rotation gets crazy-high, slow it down
         # Otherwise allow the player to adjust it
-        if @player.shape.body.w > 1.0
-          @player.turn_left
-        elsif @player.shape.body.w < -1.0
-          @player.turn_right
+        if @player.body.w > 1.0
+          @player.turn_left true
+        elsif @player.body.w < -1.0
+          @player.turn_right true
         # Check keyboard
         elsif button_down? Gosu::KbLeft
           @player.turn_left
@@ -216,6 +218,8 @@ class GameWindow < Gosu::Window
         elsif button_down? Gosu::KbDown
           @player.reverse
         end
+
+        @conn.send_move @player.move
       end
 
       # Perform the step over @dt period of time
@@ -270,7 +274,7 @@ class GameWindow < Gosu::Window
       my_obj = @registry[registry_id]
       if my_obj
         puts "Comparing my #{registry_id} with server's"
-        my_obj.update_from_json(json) if my_obj.is_a? Star # TODO
+        my_obj.update_from_json(json)
       else
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
