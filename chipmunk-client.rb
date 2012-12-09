@@ -55,6 +55,8 @@ class ClientConnection < Networking
   end
 
   def on_record(hash)
+    player_id = hash['player_id']
+    @game.create_player(player_id) if player_id
     player_vector = hash['player_vector']
     @game.set_player_vector(*player_vector) if player_vector
 
@@ -101,6 +103,8 @@ class GameWindow < Gosu::Window
 
     @stars = Array.new
 
+    @registry = {}
+
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # I create a @remove_shapes array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
@@ -131,12 +135,17 @@ class GameWindow < Gosu::Window
     conn.setup(self, player_name)
   end
 
+  def create_player(registry_id)
+    raise "Already have player #{@player}!?" if @player
+    @player = ClientPlayer.new(@conn, @conn.player_name, self)
+    @player.registry_id = registry_id
+    @registry[registry_id] = @player
+    @space.add_body(@player.body)
+    @space.add_shape(@player.shape)
+  end
+
   def set_player_vector(x, y, vel_x, vel_y)
-    unless @player
-      @player = ClientPlayer.new(@conn, @conn.player_name, self)
-      @space.add_body(@player.body)
-      @space.add_shape(@player.shape)
-    end
+    raise "No player!?" unless @player
     @player.warp(x, y, vel_x, vel_y)
   end
 
@@ -217,16 +226,18 @@ class GameWindow < Gosu::Window
     end
   end
 
-  def add_star(x, y, x_vel, y_vel)
+  def add_star(registry_id, x, y, x_vel, y_vel)
     star = ClientStar.new(x, y, x_vel, y_vel)
+    star.registry_id = registry_id
     @space.add_body(star.body)
     @space.add_shape(star.shape)
 
     @stars << star
+    puts "Added #{star}"
   end
 
   def add_stars(star_array)
-    puts "Adding #{star_array.size} stars"
+    #puts "Adding #{star_array.size} stars"
     star_array.each {|args| add_star(*args) }
   end
 

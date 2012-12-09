@@ -13,14 +13,14 @@ class Networking < Rev::TCPSocket
   def send_record(hash)
     send_str = hash.to_json
     len = send_str.size
-    puts "Sending: #{send_str} (size: #{len})"
+    # puts "Sending: #{send_str} (size: #{len})"
     write([len].pack "N")# 32-bit unsigned big-endian
     write send_str
   end
 
   # Not expected to be overridden; subclasses should override on_record
   def on_read(data)
-    puts "Received #{data.size} bytes"
+    #puts "Received #{data.size} bytes"
     @network_buffer << data
     avail = @network_buffer.size
     if avail < 4
@@ -33,10 +33,10 @@ class Networking < Rev::TCPSocket
       return nil
     end
 
-    puts "Consuming header plus #{len} bytes"
+    #puts "Consuming header plus #{len} bytes"
     bytes = @network_buffer.slice!(0...(4 + len))
     json = JSON.parse(bytes[4..-1])
-    puts "Got: #{json.inspect}"
+    #puts "Got: #{json.inspect}"
     on_record json
   end
 

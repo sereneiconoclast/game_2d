@@ -1,12 +1,15 @@
 require 'chipmunk'
 require 'gosu'
 require 'zorder'
+require 'registerable'
 
 class Star
+  include Registerable
   attr_reader :body, :shape
 
   def initialize(x, y, x_vel = 0.0, y_vel = 0.0)
     @body = CP::Body.new(0.0001, 0.0001)
+    @body.object = self
     @shape = CP::Shape::Circle.new(body, 25/2, CP::Vec2.new(0.0, 0.0))
     @shape.collision_type = :star
 
@@ -15,6 +18,10 @@ class Star
     @shape.body.p = CP::Vec2.new(x, y) # position
     @shape.body.v = CP::Vec2.new(x_vel, y_vel) # velocity
     @shape.body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+  end
+
+  def to_s
+    "STAR (#{registry_id})"
   end
 end
 

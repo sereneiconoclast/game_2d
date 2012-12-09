@@ -1,8 +1,10 @@
 require 'chipmunk'
 require 'gosu'
 require 'zorder'
+require 'registerable'
 
 class Player
+  include Registerable
   attr_reader :conn, :player_name, :body, :shape
 
   def initialize(conn, player_name)
@@ -11,6 +13,7 @@ class Player
 
     # Create the Body for the Player
     @body = CP::Body.new(10.0, 150.0)
+    @body.object = self
 
     # In order to create a shape, we must first define it
     # Chipmunk defines 3 types of Shapes: Segments, Circles and Polys
@@ -82,6 +85,10 @@ class Player
   # See accelerate for more details
   def reverse
     @body.apply_force(-(@body.a.radians_to_vec2 * (1000.0/$SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
+  end
+
+  def to_s
+    "#{player_name} (#{registry_id})"
   end
 end
 

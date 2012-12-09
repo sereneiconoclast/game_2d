@@ -40,19 +40,21 @@ class PlayerConnection < Networking
     @player = @game.add_player(self, player_name)
 
     response = {
+      'player_id' => @player.registry_id,
       'player_vector' => @player.body.game_vector,
-      'add_stars' => @game.get_all_star_vectors
+      'add_stars' => @game.get_all_star_ids_and_vectors
     }
-    puts "#{player_name} logs in from #{@remote_addr}:#{@remote_port}"
+    puts "#{@player} logs in from #{@remote_addr}:#{@remote_port}"
     send_record response
   end
 
   def add_star(star)
-    send_record 'add_stars' => [ star.body.game_vector ]
+    send_record 'add_stars' => [ [star.registry_id] + star.body.game_vector ]
   end
 
   def on_close
-    puts "#{@player.player_name} -- #{@remote_addr}:#{@remote_port} disconnected"
+    puts "#{@player} -- #{@remote_addr}:#{@remote_port} disconnected"
+    @game.delete_player @player
   end
 
   def on_record(data)
@@ -89,19 +91,22 @@ class Game < Rev::TimerWatcher
     @players = []
     
     @stars = Array.new
+
+    @registry = {}
         
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
-    # I create a @remove_shapes array because we cannot remove either Shapes or Bodies
+    # I create a @remove_stars array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
     # is through executing, then we can remove the Shapes and Bodies
     # In this case, the Shapes and the Bodies they own are removed in the Gosu::Window.update phase
-    # by iterating over the @remove_shapes array
+    # by iterating over the @remove_stars array
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
-    @remove_shapes = []
+    @remove_stars = []
     $space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
-      unless @remove_shapes.include? star_shape # filter out duplicate collisions
-        @remove_shapes << star_shape
+      star = star_shape.body.object
+      unless @remove_stars.include? star # filter out duplicate collisions
+        @remove_stars << star
         # remember to return 'true' if we want regular collision handling
       end
     end
@@ -124,34 +129,38 @@ class Game < Rev::TimerWatcher
 
   def add_player(conn, player_name)
     player = Player.new(conn, player_name)
+    player.generate_id
     $space.add_body(player.body)
     $space.add_shape(player.shape)
     x, y = WORLD_WIDTH / 2, WORLD_HEIGHT / 2 # start in the center of the world
     player.warp(x, y)
     @players << player
+    @registry[player.registry_id] = player
     player
   end
 
-  def get_all_star_vectors
-    @stars.collect {|s| s.body.game_vector }
+  def delete_player(player)
+    puts "Deleting #{player}"
+    @players.delete player
+    @registry.delete player.registry_id
+    $space.remove_body player.body
+    $space.remove_shape player.shape
+  end
+
+  def get_all_star_ids_and_vectors
+    @stars.collect {|s| [s.registry_id] + s.body.game_vector }
   end
 
   def on_timer
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
-      # This iterator makes an assumption of one Shape per Star making it safe to remove
-      # each Shape's Body as it comes up
-      # If our Stars had multiple Shapes, as would be required if we were to meticulously
-      # define their true boundaries, we couldn't do this as we would remove the Body
-      # multiple times
-      # We would probably solve this by creating a separate @remove_bodies array to remove the Bodies
-      # of the Stars that were gathered by the Player
-      @remove_shapes.each do |shape|
-        @stars.delete_if { |star| star.shape == shape }
-        $space.remove_body(shape.body)
-        $space.remove_shape(shape)
+      @remove_stars.each do |star|
+        @stars.delete star
+        $space.remove_body(star.body)
+        $space.remove_shape(star.shape)
+        raise "Star #{star} not in registry" unless @registry.delete star.registry_id
       end
-      @remove_shapes.clear # clear out the shapes for next pass
+      @remove_stars.clear # clear out the stars for next pass
       
       # When a force or torque is set on a Body, it is cumulative
       # This means that the force you applied last SUBSTEP will compound with the
@@ -177,10 +186,19 @@ class Game < Rev::TimerWatcher
     # Each update (not SUBSTEP) we see if we need to add more Stars
     if rand(100) < 4 and @stars.size < 25 then
       star = Star.new(rand * WORLD_WIDTH, rand * WORLD_HEIGHT)
+      star.generate_id
       $space.add_body(star.body)
       $space.add_shape(star.shape)
       @stars << star
+      @registry[star.registry_id] = star
       @players.each {|p| p.conn.add_star star }
+    end
+
+    # Check for registry leaks
+    expected = @players.size + @stars.size
+    actual = @registry.size
+    if expected != actual
+      puts "We have #{expected} game objects, #{actual} in registry (delta: #{actual - expected})"
     end
   end
 end
