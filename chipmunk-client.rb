@@ -62,6 +62,9 @@ class ClientConnection < Networking
 
     stars = hash['add_stars']
     @game.add_stars(stars) if stars
+
+    registry = hash['registry']
+    @game.sync_registry(registry) if registry
   end
 end
 
@@ -106,19 +109,20 @@ class GameWindow < Gosu::Window
     @registry = {}
 
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
-    # I create a @remove_shapes array because we cannot remove either Shapes or Bodies
+    # I create a @remove_stars array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
     # is through executing, then we can remove the Shapes and Bodies
     # In this case, the Shapes and the Bodies they own are removed in the Gosu::Window.update phase
-    # by iterating over the @remove_shapes array
+    # by iterating over the @remove_stars array
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
-    @remove_shapes = []
+    @remove_stars = []
     @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
-      unless @remove_shapes.include? star_shape # filter out duplicate collisions
+      star = star_shape.body.object
+      unless @remove_stars.include? star # filter out duplicate collisions
         @score += 10
         @beep.play
-        @remove_shapes << star_shape
+        @remove_stars << star
         # remember to return 'true' if we want regular collision handling
       end
     end
@@ -175,19 +179,13 @@ class GameWindow < Gosu::Window
 
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
-      # This iterator makes an assumption of one Shape per Star making it safe to remove
-      # each Shape's Body as it comes up
-      # If our Stars had multiple Shapes, as would be required if we were to meticulously
-      # define their true boundaries, we couldn't do this as we would remove the Body
-      # multiple times
-      # We would probably solve this by creating a separate @remove_bodies array to remove the Bodies
-      # of the Stars that were gathered by the Player
-      @remove_shapes.each do |shape|
-        @stars.delete_if { |star| star.shape == shape }
-        @space.remove_body(shape.body)
-        @space.remove_shape(shape)
+      @remove_stars.each do |star|
+        @stars.delete star
+        @space.remove_body(star.body)
+        @space.remove_shape(star.shape)
+        raise "Star #{star} not in registry" unless @registry.delete star.registry_id
       end
-      @remove_shapes.clear # clear out the shapes for next pass
+      @remove_stars.clear # clear out the stars for next pass
 
       if @player
         # When a force or torque is set on a Body, it is cumulative
@@ -226,6 +224,12 @@ class GameWindow < Gosu::Window
     end
   end
 
+  def add_star_from_json(json)
+    x, y = json['position']
+    x_vel, y_vel = json['velocity']
+    add_star(json['registry_id'], x, y, x_vel, y_vel)
+  end
+
   def add_star(registry_id, x, y, x_vel, y_vel)
     star = ClientStar.new(x, y, x_vel, y_vel)
     star.registry_id = registry_id
@@ -233,6 +237,7 @@ class GameWindow < Gosu::Window
     @space.add_shape(star.shape)
 
     @stars << star
+    @registry[registry_id] = star
     puts "Added #{star}"
   end
 
@@ -255,6 +260,38 @@ class GameWindow < Gosu::Window
   def button_down(id)
     if id == Gosu::KbEscape
       close
+    end
+  end
+
+  def sync_registry(server_registry)
+    my_keys = @registry.keys
+
+    server_registry.each do |registry_id, json|
+      my_obj = @registry[registry_id]
+      if my_obj
+        puts "Comparing my #{registry_id} with server's"
+        my_obj.update_from_json(json) if my_obj.is_a? Star # TODO
+      else
+        clazz = json['class']
+        puts "Don't have #{clazz} #{registry_id}, adding it"
+        case clazz
+        when 'Star'
+          add_star_from_json(json)
+        else raise "Unsupported class #{clazz}"
+        end
+      end
+
+      my_keys.delete registry_id
+    end
+
+    my_keys.each do |registry_id|
+      puts "Server doesn't have #{registry_id}, deleting it"
+      to_delete = @registry[registry_id]
+      case to_delete
+      when Star
+        @remove_stars << @registry[registry_id]
+      else raise "Unsupported class #{to_delete.class}"
+      end
     end
   end
 end

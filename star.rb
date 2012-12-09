@@ -15,13 +15,33 @@ class Star
 
     @shape.e = 0.99 # elasticity
     @shape = shape
-    @shape.body.p = CP::Vec2.new(x, y) # position
-    @shape.body.v = CP::Vec2.new(x_vel, y_vel) # velocity
-    @shape.body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+    @body.p = CP::Vec2.new(x, y) # position
+    @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
+    @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
   end
 
   def to_s
     "STAR (#{registry_id})"
+  end
+
+  def to_json(*args)
+    as_json.to_json(*args)
+  end
+
+  def as_json
+    {
+      :class => 'Star',
+      :registry_id => registry_id,
+      :position => [ @body.p.x, @body.p.y ],
+      :velocity => [ @body.v.x, @body.v.y ]
+    }
+  end
+
+  def update_from_json(json)
+    x, y = json['position']
+    x_vel, y_vel = json['velocity']
+    @body.p = CP::Vec2.new(x, y) # position
+    @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
   end
 end
 

@@ -64,6 +64,22 @@ class PlayerConnection < Networking
       puts "TODO TODO TODO..."
     end
   end
+
+  def send_registry(registry)
+    send_record :registry => registry
+  end
+end
+
+class RegistryUpdater < Rev::TimerWatcher
+  def initialize(game)
+    super(0.25, true) # Fire event four times a second
+    attach(Rev::Loop.default)
+    @game = game
+  end
+
+  def on_timer
+    @game.send_registry_updates
+  end
 end
 
 class Game < Rev::TimerWatcher
@@ -93,6 +109,7 @@ class Game < Rev::TimerWatcher
     @stars = Array.new
 
     @registry = {}
+    RegistryUpdater.new(self)
         
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # I create a @remove_stars array because we cannot remove either Shapes or Bodies
@@ -184,7 +201,7 @@ class Game < Rev::TimerWatcher
     end
     
     # Each update (not SUBSTEP) we see if we need to add more Stars
-    if rand(100) < 4 and @stars.size < 25 then
+    if rand(100) < 4 and @stars.size < 8 then
       star = Star.new(rand * WORLD_WIDTH, rand * WORLD_HEIGHT)
       star.generate_id
       $space.add_body(star.body)
@@ -199,6 +216,12 @@ class Game < Rev::TimerWatcher
     actual = @registry.size
     if expected != actual
       puts "We have #{expected} game objects, #{actual} in registry (delta: #{actual - expected})"
+    end
+  end
+
+  def send_registry_updates
+    @players.each do |p|
+      p.conn.send_registry(@registry)
     end
   end
 end

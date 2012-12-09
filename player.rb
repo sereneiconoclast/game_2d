@@ -90,6 +90,21 @@ class Player
   def to_s
     "#{player_name} (#{registry_id})"
   end
+
+  def to_json(*args)
+    as_json.to_json(*args)
+  end
+
+  def as_json
+    {
+      #JSON.create_id => self.class.name,
+      :class => 'Person',
+      :registry_id => registry_id,
+      :player_name => player_name,
+      :position => [ @body.p.x, @body.p.y ],
+      :velocity => [ @body.v.x, @body.v.y ]
+    }
+  end
 end
 
 class ClientPlayer < Player
