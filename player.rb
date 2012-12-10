@@ -92,13 +92,15 @@ class Player
     @moves << new_move
   end
 
-  def process_moves
-    puts "Processing #{@moves.size} moves" if @moves.size > 1
-    @moves.each do |move|
-      next unless %w(turn_left turn_right accelerate boost reverse).include? move
+  def dequeue_move
+    return if @moves.empty?
+    puts "Processing a move (#{@moves.size} in queue)"
+    move = @moves.shift
+    if %w(turn_left turn_right accelerate boost reverse).include? move
       send move.to_sym
+    else
+      puts "Invalid move: #{move}"
     end
-    @moves.clear
   end
 
   # When a force or torque is set on a Body, it is cumulative

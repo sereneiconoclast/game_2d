@@ -195,7 +195,7 @@ class Game < Rev::TimerWatcher
         elsif p.body.w < -1.0
           p.turn_right
         else
-          p.process_moves
+          p.dequeue_move
         end
       end
       
