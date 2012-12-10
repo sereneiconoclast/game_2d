@@ -8,6 +8,7 @@ class Networking < Rev::TCPSocket
     puts "Establishing network_buffer and record"
     @network_buffer = ''
     @last_record = nil
+    sync = true
   end
 
   def send_record(hash)

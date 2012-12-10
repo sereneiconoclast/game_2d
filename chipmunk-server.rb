@@ -61,7 +61,7 @@ class PlayerConnection < Networking
     if (handshake = data['handshake'])
       answer_handshake(handshake)
     elsif (move = data['move'])
-      @player.move = move
+      @player.add_move move
     else
       puts "IGNORING BAD DATA: #{data.inspect}"
     end
@@ -195,7 +195,7 @@ class Game < Rev::TimerWatcher
         elsif p.body.w < -1.0
           p.turn_right
         else
-          p.process_move
+          p.process_moves
         end
       end
       

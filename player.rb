@@ -6,12 +6,11 @@ require 'registerable'
 class Player
   include Registerable
   attr_reader :conn, :player_name, :body, :shape
-  attr_writer :move
 
   def initialize(conn, player_name)
     @conn = conn
     @player_name = player_name
-    @move = nil
+    @moves = []
 
     # Create the Body for the Player
     @body = CP::Body.new(10.0, 150.0)
@@ -89,10 +88,17 @@ class Player
     @body.apply_force(-(@body.a.radians_to_vec2 * (1000.0/$SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
   end
 
-  def process_move
-    return unless %w(turn_left turn_right accelerate boost reverse).include? @move
-    send @move.to_sym
-    @move = nil
+  def add_move(new_move)
+    @moves << new_move
+  end
+
+  def process_moves
+    puts "Processing #{@moves.size} moves" if @moves.size > 1
+    @moves.each do |move|
+      next unless %w(turn_left turn_right accelerate boost reverse).include? move
+      send move.to_sym
+    end
+    @moves.clear
   end
 
   # When a force or torque is set on a Body, it is cumulative
@@ -114,11 +120,13 @@ class Player
   def as_json
     {
       #JSON.create_id => self.class.name,
-      :class => 'Person',
+      :class => 'Player',
       :registry_id => registry_id,
       :player_name => player_name,
       :position => [ @body.p.x, @body.p.y ],
-      :velocity => [ @body.v.x, @body.v.y ]
+      :velocity => [ @body.v.x, @body.v.y ],
+      :angle => @body.a,
+      :angular_vel => @body.w
     }
   end
 
@@ -126,8 +134,10 @@ class Player
     # Player name updates?
     x, y = json['position']
     x_vel, y_vel = json['velocity']
-    @body.p = CP::Vec2.new(x, y) # position
+    @body.p = CP::Vec2.new(x, y)  # position
     @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
+    @body.a = json['angle']       # radians
+    @body.w = json['angular_vel'] # radians/second
   end
 end
 
@@ -136,11 +146,40 @@ class ClientPlayer < Player
 
   def initialize(conn, player_name, window)
     super(conn, player_name)
+    @window = window
     @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
+    @move = nil
   end
 
   def draw
     @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Player, @body.a.radians_to_gosu)
+  end
+
+  def handle_input_and_move
+    reset_for_next_move
+
+    # If our rotation gets crazy-high, slow it down
+    # Otherwise allow the player to adjust it
+    if body.w > 1.0
+      turn_left true
+    elsif body.w < -1.0
+      turn_right true
+    # Check keyboard
+    elsif @window.button_down? Gosu::KbLeft
+      turn_left
+    elsif @window.button_down? Gosu::KbRight
+      turn_right
+    end
+
+    if @window.button_down? Gosu::KbUp
+      if ( (@window.button_down? Gosu::KbRightShift) || (@window.button_down? Gosu::KbLeftShift) )
+        boost
+      else
+        accelerate
+      end
+    elsif @window.button_down? Gosu::KbDown
+      reverse
+    end
   end
 
   def reset_for_next_move

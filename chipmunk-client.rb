@@ -194,30 +194,7 @@ class GameWindow < Gosu::Window
       @remove_stars.clear # clear out the stars for next pass
 
       if @player
-        @player.reset_for_next_move
-
-        # If our rotation gets crazy-high, slow it down
-        # Otherwise allow the player to adjust it
-        if @player.body.w > 1.0
-          @player.turn_left true
-        elsif @player.body.w < -1.0
-          @player.turn_right true
-        # Check keyboard
-        elsif button_down? Gosu::KbLeft
-          @player.turn_left
-        elsif button_down? Gosu::KbRight
-          @player.turn_right
-        end
-
-        if button_down? Gosu::KbUp
-          if ( (button_down? Gosu::KbRightShift) || (button_down? Gosu::KbLeftShift) )
-            @player.boost
-          else
-            @player.accelerate
-          end
-        elsif button_down? Gosu::KbDown
-          @player.reverse
-        end
+        @player.handle_input_and_move
 
         @conn.send_move @player.move
       end
