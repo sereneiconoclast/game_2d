@@ -40,16 +40,15 @@ class PlayerConnection < Networking
     @player = @game.add_player(self, player_name)
 
     response = {
-      'player_id' => @player.registry_id,
-      'player_vector' => @player.body.game_vector,
-      'add_stars' => @game.get_all_star_ids_and_vectors
+      'you_are' => @player,
+      'add_stars' => @game.get_all_stars
     }
     puts "#{@player} logs in from #{@remote_addr}:#{@remote_port}"
     send_record response
   end
 
   def add_star(star)
-    send_record 'add_stars' => [ [star.registry_id] + star.body.game_vector ]
+    send_record 'add_stars' => [ star ]
   end
 
   def on_close
@@ -166,8 +165,8 @@ class Game < Rev::TimerWatcher
     $space.remove_shape player.shape
   end
 
-  def get_all_star_ids_and_vectors
-    @stars.collect {|s| [s.registry_id] + s.body.game_vector }
+  def get_all_stars
+    @stars
   end
 
   def on_timer

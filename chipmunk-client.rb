@@ -55,10 +55,11 @@ class ClientConnection < Networking
   end
 
   def on_record(hash)
-    player_id = hash['player_id']
-    @game.create_player(player_id) if player_id
-    player_vector = hash['player_vector']
-    @game.set_player_vector(*player_vector) if player_vector
+    handshake_response = hash['you_are']
+    if handshake_response
+      player = @game.create_player handshake_response['registry_id']
+      player.update_from_json handshake_response
+    end
 
     stars = hash['add_stars']
     @game.add_stars(stars) if stars
@@ -145,11 +146,13 @@ class GameWindow < Gosu::Window
 
   def create_player(registry_id)
     raise "Already have player #{@player}!?" if @player
+    puts "I am player #{registry_id}"
     @player = ClientPlayer.new(@conn, @conn.player_name, self)
     @player.registry_id = registry_id
     @registry[registry_id] = @player
     @space.add_body(@player.body)
     @space.add_shape(@player.shape)
+    @player
   end
 
   def set_player_vector(x, y, vel_x, vel_y)
@@ -224,7 +227,7 @@ class GameWindow < Gosu::Window
 
   def add_stars(star_array)
     #puts "Adding #{star_array.size} stars"
-    star_array.each {|args| add_star(*args) }
+    star_array.each {|json| add_star_from_json(json) }
   end
 
   def draw
