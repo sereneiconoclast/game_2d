@@ -55,15 +55,28 @@ class Player
   # Apply negative Torque; Chipmunk will do the rest
   # $SUBSTEPS is used as a divisor to keep turning rate constant
   # even if the number of steps per update are adjusted
+  #
+  # This needs to be high enough to counteract gravity when the
+  # player is sitting on the floor, or they may get stuck
   def turn_left
     @body.t -= 40000.0/$SUBSTEPS
   end
 
   # Apply positive Torque; Chipmunk will do the rest
-  # $SUBSTEPS is used as a divisor to keep turning rate constant
-  # even if the number of steps per update are adjusted
   def turn_right
     @body.t += 40000.0/$SUBSTEPS
+  end
+
+  # Slow rotation by applying a torque in the opposite direction
+  def slow_rotation
+    # Stop spin completely if rotation less than half a degree
+    if @body.w.abs < (Math::PI / 360.0)
+      @body.w = 0.0
+      return
+    end
+
+    amt = 500.0 * @body.w / $SUBSTEPS
+    @body.t -= amt
   end
 
   # Apply forward force; Chipmunk will do the rest
@@ -93,11 +106,15 @@ class Player
   end
 
   def dequeue_move
-    return if @moves.empty?
+    if @moves.empty?
+      slow_rotation
+      return
+    end
     puts "Processing a move (#{@moves.size} in queue)"
     move = @moves.shift
     if %w(turn_left turn_right accelerate boost reverse).include? move
       send move.to_sym
+      slow_rotation unless move.start_with? 'turn_'
     else
       puts "Invalid move: #{move}"
     end
@@ -171,6 +188,8 @@ class ClientPlayer < Player
       turn_left
     elsif @window.button_down? Gosu::KbRight
       turn_right
+    else
+      slow_rotation
     end
 
     if @window.button_down? Gosu::KbUp
