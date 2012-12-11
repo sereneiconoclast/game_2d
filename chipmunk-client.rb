@@ -57,12 +57,14 @@ class ClientConnection < Networking
   def on_record(hash)
     handshake_response = hash['you_are']
     if handshake_response
-      player = @game.create_player handshake_response['registry_id']
-      player.update_from_json handshake_response
+      @game.create_local_player handshake_response
     end
 
     stars = hash['add_stars']
     @game.add_stars(stars) if stars
+
+    players = hash['add_players']
+    @game.add_players(players) if players
 
     registry = hash['registry']
     @game.sync_registry(registry) if registry
@@ -109,6 +111,7 @@ class GameWindow < Gosu::Window
     add_bounding_wall(0.0, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT)   # left
     add_bounding_wall(WORLD_WIDTH, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT) # right
 
+    @players = Array.new
     @stars = Array.new
 
     @registry = {}
@@ -144,20 +147,22 @@ class GameWindow < Gosu::Window
     conn.setup(self, player_name)
   end
 
-  def create_player(registry_id)
+  def create_local_player(json)
     raise "Already have player #{@player}!?" if @player
-    puts "I am player #{registry_id}"
-    @player = ClientPlayer.new(@conn, @conn.player_name, self)
-    @player.registry_id = registry_id
-    @registry[registry_id] = @player
-    @space.add_body(@player.body)
-    @space.add_shape(@player.shape)
-    @player
+    @player = add_player(json, LocalPlayer, @conn)
+    puts "I am player #{@player.registry_id}"
   end
 
-  def set_player_vector(x, y, vel_x, vel_y)
-    raise "No player!?" unless @player
-    @player.warp(x, y, vel_x, vel_y)
+  def add_player(json, clazz=ClientPlayer, conn=nil)
+    player = clazz.new(conn, json['player_name'], self)
+    player.registry_id = registry_id = json['registry_id']
+    puts "Created player #{player}"
+    player.update_from_json(json)
+    @registry[registry_id] = player
+    @space.add_body(player.body)
+    @space.add_shape(player.shape)
+    @players << player
+    player
   end
 
   def set_camera_position
@@ -196,11 +201,12 @@ class GameWindow < Gosu::Window
       end
       @remove_stars.clear # clear out the stars for next pass
 
-      if @player
-        @player.handle_input_and_move
+      # Player at the keyboard queues up a command
+      @player.handle_input if @player
 
-        @conn.send_move @player.move
-      end
+      # Process commands by all players
+      # For the local player, also sends command to server
+      @players.each &:dequeue_move
 
       # Perform the step over @dt period of time
       # For best performance @dt should remain consistent for the game
@@ -208,15 +214,11 @@ class GameWindow < Gosu::Window
     end
   end
 
-  def add_star_from_json(json)
+  def add_star(json)
     x, y = json['position']
     x_vel, y_vel = json['velocity']
-    add_star(json['registry_id'], x, y, x_vel, y_vel)
-  end
-
-  def add_star(registry_id, x, y, x_vel, y_vel)
     star = ClientStar.new(x, y, x_vel, y_vel)
-    star.registry_id = registry_id
+    star.registry_id = registry_id = json['registry_id']
     @space.add_body(star.body)
     @space.add_shape(star.shape)
 
@@ -227,7 +229,11 @@ class GameWindow < Gosu::Window
 
   def add_stars(star_array)
     #puts "Adding #{star_array.size} stars"
-    star_array.each {|json| add_star_from_json(json) }
+    star_array.each {|json| add_star(json) }
+  end
+
+  def add_players(players)
+    players.each {|json| add_player(json) }
   end
 
   def draw
@@ -253,14 +259,13 @@ class GameWindow < Gosu::Window
     server_registry.each do |registry_id, json|
       my_obj = @registry[registry_id]
       if my_obj
-        puts "Comparing my #{registry_id} with server's"
         my_obj.update_from_json(json)
       else
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
         case clazz
-        when 'Star'
-          add_star_from_json(json)
+        when 'Star' then add_star(json)
+        when 'Player' then add_player(json)
         else raise "Unsupported class #{clazz}"
         end
       end

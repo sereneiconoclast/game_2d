@@ -36,11 +36,15 @@ class PlayerConnection < Networking
   end
 
   def answer_handshake(handshake)
+    # Copy this array since it's about to change
+    other_players = @game.get_all_players.dup
+
     player_name = handshake['player_name']
     @player = @game.add_player(self, player_name)
 
     response = {
       'you_are' => @player,
+      'add_players' => other_players,
       'add_stars' => @game.get_all_stars
     }
     puts "#{@player} logs in from #{@remote_addr}:#{@remote_port}"
@@ -49,6 +53,10 @@ class PlayerConnection < Networking
 
   def add_star(star)
     send_record 'add_stars' => [ star ]
+  end
+
+  def add_player(player)
+    send_record 'add_player' => player
   end
 
   def on_close
@@ -60,7 +68,7 @@ class PlayerConnection < Networking
     if (handshake = data['handshake'])
       answer_handshake(handshake)
     elsif (move = data['move'])
-      @player.add_move move
+      @player.add_move move.to_sym
     else
       puts "IGNORING BAD DATA: #{data.inspect}"
     end
@@ -90,28 +98,27 @@ class Game < Rev::TimerWatcher
 
     # Time increment over which to apply a physics "step" ("delta t")
     @dt = (1.0/60.0)
-    
+
     # Create our Space and set its damping
     # A damping of 0.8 causes the ship bleed off its force and torque over time
     # This is not realistic behavior in a vacuum of space, but it gives the game
     # the feel I'd like in this situation
-    $space = CP::Space.new
-    # $space.damping = 0.8    
-    $space.gravity = CP::Vec2.new(0.0, 10.0)
+    @space = CP::Space.new
+    # @space.damping = 0.8
+    @space.gravity = CP::Vec2.new(0.0, 10.0)
 
     # Walls all around the screen
     add_bounding_wall(WORLD_WIDTH / 2, 0.0, WORLD_WIDTH, 0.0)   # top
     add_bounding_wall(WORLD_WIDTH / 2, WORLD_HEIGHT, WORLD_WIDTH, 0.0) # bottom
     add_bounding_wall(0.0, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT)   # left
     add_bounding_wall(WORLD_WIDTH, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT) # right
-    
-    @players = []
-    
+
+    @players = Array.new
     @stars = Array.new
 
     @registry = {}
     RegistryUpdater.new(self)
-        
+
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # I create a @remove_stars array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
@@ -121,7 +128,7 @@ class Game < Rev::TimerWatcher
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
     @remove_stars = []
-    $space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
+    @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
       star = star_shape.body.object
       unless @remove_stars.include? star # filter out duplicate collisions
         @remove_stars << star
@@ -141,17 +148,17 @@ class Game < Rev::TimerWatcher
       1.0) # thickness
     shape.collision_type = :wall
     shape.e = 0.99 # elasticity (bounce)
-    $space.add_body(wall)
-    $space.add_shape(shape)
+    @space.add_body(wall)
+    @space.add_shape(shape)
   end
 
   def add_player(conn, player_name)
     player = Player.new(conn, player_name)
     player.generate_id
-    $space.add_body(player.body)
-    $space.add_shape(player.shape)
-    x, y = WORLD_WIDTH / 2, WORLD_HEIGHT / 2 # start in the center of the world
-    player.warp(x, y)
+    @space.add_body(player.body)
+    @space.add_shape(player.shape)
+    player.warp(WORLD_WIDTH / 2, WORLD_HEIGHT / 2) # start in the center of the world
+    @players.each {|p| p.conn.add_player(player) }
     @players << player
     @registry[player.registry_id] = player
     player
@@ -161,8 +168,12 @@ class Game < Rev::TimerWatcher
     puts "Deleting #{player}"
     @players.delete player
     @registry.delete player.registry_id
-    $space.remove_body player.body
-    $space.remove_shape player.shape
+    @space.remove_body player.body
+    @space.remove_shape player.shape
+  end
+
+  def get_all_players
+    @players
   end
 
   def get_all_stars
@@ -174,41 +185,29 @@ class Game < Rev::TimerWatcher
     $SUBSTEPS.times do
       @remove_stars.each do |star|
         @stars.delete star
-        $space.remove_body(star.body)
-        $space.remove_shape(star.shape)
+        @space.remove_body(star.body)
+        @space.remove_shape(star.shape)
         raise "Star #{star} not in registry" unless @registry.delete star.registry_id
       end
       @remove_stars.clear # clear out the stars for next pass
-      
+
       # When a force or torque is set on a Body, it is cumulative
       # This means that the force you applied last SUBSTEP will compound with the
       # force applied this SUBSTEP; which is probably not the behavior you want
       # We reset the forces on the Player each SUBSTEP for this reason
-      @players.each do |p|
-        p.body.reset_forces
-      
-        # If our rotation gets crazy-high, slow it down
-        # Otherwise allow the player to adjust it
-        if p.body.w > 1.0
-          p.turn_left
-        elsif p.body.w < -1.0
-          p.turn_right
-        else
-          p.dequeue_move
-        end
-      end
-      
+      @players.each &:dequeue_move
+
       # Perform the step over @dt period of time
       # For best performance @dt should remain consistent for the game
-      $space.step(@dt)
+      @space.step(@dt)
     end
-    
+
     # Each update (not SUBSTEP) we see if we need to add more Stars
     if rand(100) < 4 and @stars.size < 8 then
       star = Star.new(rand * WORLD_WIDTH, rand * WORLD_HEIGHT)
       star.generate_id
-      $space.add_body(star.body)
-      $space.add_shape(star.shape)
+      @space.add_body(star.body)
+      @space.add_shape(star.shape)
       @stars << star
       @registry[star.registry_id] = star
       @players.each {|p| p.conn.add_star star }

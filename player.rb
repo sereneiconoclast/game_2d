@@ -3,6 +3,13 @@ require 'gosu'
 require 'zorder'
 require 'registerable'
 
+# The base Player class representing what all Players have in common
+# Moves can be enqueued by calling add_move
+# Calling dequeue_move causes a move to be executed, applying forces
+# to the game object
+#
+# The server instantiates this class to represent each connected player
+# The connection (conn) is the received one for that player
 class Player
   include Registerable
   attr_reader :conn, :player_name, :body, :shape
@@ -42,6 +49,8 @@ class Player
     # which you might consider the top in the traditional Trig unit circle sense is actually
     # the bottom; thus 3PI/2 is the top
     @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+
+    @body.w_limit = 1.2
   end
 
   # Directly set the position and velocity of our Player
@@ -50,6 +59,14 @@ class Player
     @body.p = CP::Vec2.new(x, y)
     @body.v = CP::Vec2.new(x_vel, y_vel)
     @body.activate
+  end
+
+  # When a force or torque is set on a Body, it is cumulative
+  # This means that the force you applied last SUBSTEP will compound with the
+  # force applied this SUBSTEP; which is probably not the behavior you want
+  # We reset the forces on the Player each SUBSTEP for this reason
+  def reset_for_next_move
+    @body.reset_forces
   end
 
   # Apply negative Torque; Chipmunk will do the rest
@@ -102,30 +119,24 @@ class Player
   end
 
   def add_move(new_move)
-    @moves << new_move
+    @moves << new_move if new_move
   end
 
   def dequeue_move
-    if @moves.empty?
-      slow_rotation
-      return
-    end
-    puts "Processing a move (#{@moves.size} in queue)"
-    move = @moves.shift
-    if %w(turn_left turn_right accelerate boost reverse).include? move
-      send move.to_sym
-      slow_rotation unless move.start_with? 'turn_'
-    else
-      puts "Invalid move: #{move}"
-    end
-  end
+    reset_for_next_move
+    slow_rotation
 
-  # When a force or torque is set on a Body, it is cumulative
-  # This means that the force you applied last SUBSTEP will compound with the
-  # force applied this SUBSTEP; which is probably not the behavior you want
-  # We reset the forces on the Player each SUBSTEP for this reason
-  def reset_for_next_move
-    @body.reset_forces
+    return if @moves.empty?
+
+    puts "#{@player_name} processing a move (#{@moves.size} in queue)"
+    move = @moves.shift
+    if [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? move
+      send move
+      return move
+    else
+      puts "Invalid move for #{self}: #{move}"
+      return nil
+    end
   end
 
   def to_s
@@ -150,7 +161,7 @@ class Player
   end
 
   def update_from_json(json)
-    # Player name updates?
+    @player_name = json['player_name']
     x, y = json['position']
     x_vel, y_vel = json['velocity']
     @body.p = CP::Vec2.new(x, y)  # position
@@ -160,76 +171,52 @@ class Player
   end
 end
 
+# Subclass representing a player client-side
+# Adds drawing capability
+# We instantiate this class directly to represent remote players (not the one
+# at the keyboard)
+# Instances of this class will not have a connection (conn) because players
+# aren't directly connected to each other
 class ClientPlayer < Player
-  attr_reader :move
-
   def initialize(conn, player_name, window)
     super(conn, player_name)
     @window = window
     @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
-    @move = nil
   end
 
   def draw
     @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Player, @body.a.radians_to_gosu)
   end
+end
 
-  def handle_input_and_move
-    reset_for_next_move
+# Subclass representing the player at the controls of this client
+# This is different in that we check the keyboard, and send moves
+# to the server in addition to dequeueing them
+class LocalPlayer < ClientPlayer
+  def initialize(conn, player_name, window)
+    super
+  end
 
-    # If our rotation gets crazy-high, slow it down
-    # Otherwise allow the player to adjust it
-    if body.w > 1.0
-      turn_left true
-    elsif body.w < -1.0
-      turn_right true
-    # Check keyboard
-    elsif @window.button_down? Gosu::KbLeft
-      turn_left
-    elsif @window.button_down? Gosu::KbRight
-      turn_right
-    else
-      slow_rotation
-    end
+  def handle_input
+    add_move move_for_keypress
+  end
 
-    if @window.button_down? Gosu::KbUp
-      if ( (@window.button_down? Gosu::KbRightShift) || (@window.button_down? Gosu::KbLeftShift) )
-        boost
+  # Check keyboard, return a motion symbol or nil
+  def move_for_keypress
+    case
+    when @window.button_down?(Gosu::KbLeft) then :turn_left
+    when @window.button_down?(Gosu::KbRight) then :turn_right
+    when @window.button_down?(Gosu::KbUp) then
+      if @window.button_down?(Gosu::KbRightShift) || @window.button_down?(Gosu::KbLeftShift)
+        :boost
       else
-        accelerate
+        :accelerate
       end
-    elsif @window.button_down? Gosu::KbDown
-      reverse
+    when @window.button_down?(Gosu::KbDown) then :reverse
     end
   end
 
-  def reset_for_next_move
-    super
-    @move = nil
-  end
-
-  def turn_left(automatic = false)
-    super()
-    @move = :turn_left unless automatic
-  end
-
-  def turn_right(automatic = false)
-    super()
-    @move = :turn_right unless automatic
-  end
-
-  def boost
-    super
-    @move = :boost
-  end
-
-  def accelerate
-    super
-    @move = :accelerate
-  end
-
-  def reverse
-    super
-    @move = :reverse
+  def dequeue_move
+    @conn.send_move(super)
   end
 end
