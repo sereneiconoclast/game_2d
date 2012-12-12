@@ -18,8 +18,6 @@ require 'zorder'
 
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 480
-WORLD_WIDTH = 900
-WORLD_HEIGHT = 600
 
 HOSTNAME = 'localhost'
 PORT = 4321
@@ -38,6 +36,8 @@ class GameWindow < Gosu::Window
   def initialize(player_name)
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Gosu & Chipmunk Integration Demo"
+    @world_width = @world_height = 0
+
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
 
     # Load star animation using window
@@ -58,12 +58,6 @@ class GameWindow < Gosu::Window
     @space = CP::Space.new
     # @space.damping = 0.8
     @space.gravity = CP::Vec2.new(0.0, 10.0)
-
-    # Walls all around the screen
-    add_bounding_wall(WORLD_WIDTH / 2, 0.0, WORLD_WIDTH, 0.0)   # top
-    add_bounding_wall(WORLD_WIDTH / 2, WORLD_HEIGHT, WORLD_WIDTH, 0.0) # bottom
-    add_bounding_wall(0.0, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT)   # left
-    add_bounding_wall(WORLD_WIDTH, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT) # right
 
     @players = Array.new
     @stars = Array.new
@@ -100,6 +94,17 @@ class GameWindow < Gosu::Window
     conn.setup(self, player_name)
   end
 
+  def establish_world(width, height)
+    puts "World is #{width}x#{height}"
+    @world_width, @world_height = width, height
+
+    # Walls all around the world
+    add_bounding_wall(@world_width / 2, 0.0, @world_width, 0.0)   # top
+    add_bounding_wall(@world_width / 2, @world_height, @world_width, 0.0) # bottom
+    add_bounding_wall(0.0, @world_height / 2, 0.0, @world_height)   # left
+    add_bounding_wall(@world_width, @world_height / 2, 0.0, @world_height) # right
+  end
+
   def create_local_player(json)
     raise "Already have player #{@player}!?" if @player
     @player = add_player(json, LocalPlayer, @conn)
@@ -129,8 +134,21 @@ class GameWindow < Gosu::Window
   end
 
   def set_camera_position
-    @camera_x = [[@player.body.p.x - SCREEN_WIDTH/2, 0].max, WORLD_WIDTH - SCREEN_WIDTH].min
-    @camera_y = [[@player.body.p.y - SCREEN_HEIGHT/2, 0].max, WORLD_HEIGHT - SCREEN_HEIGHT].min
+    # Given plenty of room, put the player in the middle of the screen
+    # If doing so would expose the area outside the world, move the camera just enough
+    # to avoid that
+    # If the world is smaller than the window, center it
+
+    @camera_x = if SCREEN_WIDTH > @world_width
+      (@world_width - SCREEN_WIDTH) / 2 # negative
+    else
+      [[@player.body.p.x - SCREEN_WIDTH/2, @world_width - SCREEN_WIDTH].min, 0].max
+    end
+    @camera_y = if SCREEN_HEIGHT > @world_height
+      (@world_height - SCREEN_HEIGHT) / 2 # negative
+    else
+      [[@player.body.p.y - SCREEN_HEIGHT/2, @world_height - SCREEN_HEIGHT].min, 0].max
+    end
   end
 
   def add_bounding_wall(x_pos, y_pos, width, height)

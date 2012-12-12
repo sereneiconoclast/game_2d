@@ -55,7 +55,7 @@ class Game < Rev::TimerWatcher
     # @space.damping = 0.8
     @space.gravity = CP::Vec2.new(0.0, 10.0)
 
-    # Walls all around the screen
+    # Walls all around the world
     add_bounding_wall(WORLD_WIDTH / 2, 0.0, WORLD_WIDTH, 0.0)   # top
     add_bounding_wall(WORLD_WIDTH / 2, WORLD_HEIGHT, WORLD_WIDTH, 0.0) # bottom
     add_bounding_wall(0.0, WORLD_HEIGHT / 2, 0.0, WORLD_HEIGHT)   # left
@@ -87,6 +87,9 @@ class Game < Rev::TimerWatcher
       end
     end
   end
+
+  def world_width; WORLD_WIDTH; end
+  def world_height; WORLD_HEIGHT; end
 
   def add_bounding_wall(x_pos, y_pos, width, height)
     wall = CP::Body.new_static
