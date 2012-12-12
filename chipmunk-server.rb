@@ -63,6 +63,10 @@ class PlayerConnection < Networking
     send_record 'delete_players' => [ player.registry_id ]
   end
 
+  def update_score(player)
+    send_record 'update_score' => { player.registry_id => player.score }
+  end
+
   def on_close
     puts "#{@player} -- #{@remote_addr}:#{@remote_port} disconnected"
     @game.delete_player @player
@@ -135,6 +139,9 @@ class Game < Rev::TimerWatcher
     @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
       star = star_shape.body.object
       unless @remove_stars.include? star # filter out duplicate collisions
+        player = ship_shape.body.object
+        player.score += 10
+        @players.each {|p| p.conn.update_score player }
         @remove_stars << star
         # remember to return 'true' if we want regular collision handling
       end

@@ -11,12 +11,15 @@ require 'registerable'
 # The server instantiates this class to represent each connected player
 # The connection (conn) is the received one for that player
 class Player
+  include Comparable
   include Registerable
   attr_reader :conn, :player_name, :body, :shape
+  attr_accessor :score
 
   def initialize(conn, player_name)
     @conn = conn
     @player_name = player_name
+    @score = 0
     @moves = []
 
     # Create the Body for the Player
@@ -139,6 +142,10 @@ class Player
     end
   end
 
+  def <=>(other)
+    self.player_name <=> other.player_name
+  end
+
   def to_s
     "#{player_name} (#{registry_id})"
   end
@@ -153,6 +160,7 @@ class Player
       :class => 'Player',
       :registry_id => registry_id,
       :player_name => player_name,
+      :score => score,
       :position => [ @body.p.x, @body.p.y ],
       :velocity => [ @body.v.x, @body.v.y ],
       :angle => @body.a,
@@ -162,6 +170,7 @@ class Player
 
   def update_from_json(json)
     @player_name = json['player_name']
+    @score = json['score']
     x, y = json['position']
     x_vel, y_vel = json['velocity']
     @body.p = CP::Vec2.new(x, y)  # position

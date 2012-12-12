@@ -69,6 +69,9 @@ class ClientConnection < Networking
     players = hash['delete_players']
     @game.delete_players(players) if players
 
+    score_update = hash['update_score']
+    @game.update_score(score_update) if score_update
+
     registry = hash['registry']
     @game.sync_registry(registry) if registry
   end
@@ -93,8 +96,6 @@ class GameWindow < Gosu::Window
     # Put the beep here, as it is the environment now that determines collision
     @beep = Gosu::Sample.new(self, "media/Beep.wav")
 
-    # Put the score here, as it is the environment that tracks this now
-    @score = 0
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
 
     # Time increment over which to apply a physics "step" ("delta t")
@@ -131,7 +132,6 @@ class GameWindow < Gosu::Window
     @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
       star = star_shape.body.object
       unless @remove_objects.include? star # filter out duplicate collisions
-        @score += 10
         @beep.play
         @remove_objects << star
         # remember to return 'true' if we want regular collision handling
@@ -255,6 +255,12 @@ class GameWindow < Gosu::Window
     players.each {|reg_id| delete_player(@registry[reg_id]) }
   end
 
+  def update_score(update)
+    registry_id, score = update.to_a.first
+    return unless player = @registry[registry_id]
+    player.score = score
+  end
+
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
     return unless @player
@@ -262,7 +268,10 @@ class GameWindow < Gosu::Window
     translate(-@camera_x, -@camera_y) do
       (@players + @stars).each &:draw
     end
-    @font.draw("Score: #{@score}", 10, 10, ZOrder::UI, 1.0, 1.0, 0xffffff00)
+
+    @players.sort.each_with_index do |player, num|
+      @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::UI, 1.0, 1.0, 0xffffff00)
+    end
   end
 
   def button_down(id)
