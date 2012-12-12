@@ -56,7 +56,11 @@ class PlayerConnection < Networking
   end
 
   def add_player(player)
-    send_record 'add_player' => player
+    send_record 'add_players' => [ player ]
+  end
+
+  def delete_player(player)
+    send_record 'delete_players' => [ player.registry_id ]
   end
 
   def on_close
@@ -170,6 +174,7 @@ class Game < Rev::TimerWatcher
     @registry.delete player.registry_id
     @space.remove_body player.body
     @space.remove_shape player.shape
+    @players.each {|other| other.conn.delete_player player }
   end
 
   def get_all_players

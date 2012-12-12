@@ -66,6 +66,9 @@ class ClientConnection < Networking
     players = hash['add_players']
     @game.add_players(players) if players
 
+    players = hash['delete_players']
+    @game.delete_players(players) if players
+
     registry = hash['registry']
     @game.sync_registry(registry) if registry
   end
@@ -117,20 +120,20 @@ class GameWindow < Gosu::Window
     @registry = {}
 
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
-    # I create a @remove_stars array because we cannot remove either Shapes or Bodies
+    # I create a @remove_objects array because we cannot remove either Shapes or Bodies
     # from Space within a collision closure, rather, we have to wait till the closure
     # is through executing, then we can remove the Shapes and Bodies
     # In this case, the Shapes and the Bodies they own are removed in the Gosu::Window.update phase
-    # by iterating over the @remove_stars array
+    # by iterating over the @remove_objects array
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
-    @remove_stars = []
+    @remove_objects = []
     @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
       star = star_shape.body.object
-      unless @remove_stars.include? star # filter out duplicate collisions
+      unless @remove_objects.include? star # filter out duplicate collisions
         @score += 10
         @beep.play
-        @remove_stars << star
+        @remove_objects << star
         # remember to return 'true' if we want regular collision handling
       end
     end
@@ -156,13 +159,23 @@ class GameWindow < Gosu::Window
   def add_player(json, clazz=ClientPlayer, conn=nil)
     player = clazz.new(conn, json['player_name'], self)
     player.registry_id = registry_id = json['registry_id']
-    puts "Created player #{player}"
+    puts "Added player #{player}"
     player.update_from_json(json)
     @registry[registry_id] = player
     @space.add_body(player.body)
     @space.add_shape(player.shape)
     @players << player
     player
+  end
+
+  def delete_player(player)
+    return unless player
+    raise "We've been kicked!!" if player == @player
+    puts "Disconnected: #{player}"
+    @registry.delete player.registry_id
+    @players.delete player
+    @space.remove_body(player.body)
+    @space.remove_shape(player.shape)
   end
 
   def set_camera_position
@@ -191,15 +204,17 @@ class GameWindow < Gosu::Window
 
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
-      @remove_stars.each do |star|
-        # We may have just removed this star after a registry update
-        next unless @registry.delete star.registry_id
+      @remove_objects.each do |object|
+        # We may have just removed this object after a registry update
+        next unless @registry.delete object.registry_id
 
-        @stars.delete star
-        @space.remove_body(star.body)
-        @space.remove_shape(star.shape)
+        @players.delete object if object.is_a? Player
+        @stars.delete object if object.is_a? Star
+
+        @space.remove_body(object.body)
+        @space.remove_shape(object.shape)
       end
-      @remove_stars.clear # clear out the stars for next pass
+      @remove_objects.clear # clear out the stars/players for next pass
 
       # Player at the keyboard queues up a command
       @player.handle_input if @player
@@ -236,13 +251,16 @@ class GameWindow < Gosu::Window
     players.each {|json| add_player(json) }
   end
 
+  def delete_players(players)
+    players.each {|reg_id| delete_player(@registry[reg_id]) }
+  end
+
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
     return unless @player
     set_camera_position
     translate(-@camera_x, -@camera_y) do
-      @player.draw
-      @stars.each &:draw
+      (@players + @stars).each &:draw
     end
     @font.draw("Score: #{@score}", 10, 10, ZOrder::UI, 1.0, 1.0, 0xffffff00)
   end
@@ -275,12 +293,7 @@ class GameWindow < Gosu::Window
 
     my_keys.each do |registry_id|
       puts "Server doesn't have #{registry_id}, deleting it"
-      to_delete = @registry[registry_id]
-      case to_delete
-      when Star
-        @remove_stars << @registry[registry_id]
-      else raise "Unsupported class #{to_delete.class}"
-      end
+      @remove_objects << @registry[registry_id]
     end
   end
 end
