@@ -40,9 +40,9 @@ class GameSpace
     # A damping of 0.8 causes the ship bleed off its force and torque over time
     # This is not realistic behavior in a vacuum of space, but it gives the game
     # the feel I'd like in this situation
-    # damping = 0.8
+    # @real_space.damping = 0.8
 
-    gravity = CP::Vec2.new(0.0, GRAVITY)
+    @real_space.gravity = CP::Vec2.new(0.0, GRAVITY)
 
     @registry = {}
 

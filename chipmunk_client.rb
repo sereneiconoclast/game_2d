@@ -153,6 +153,10 @@ class GameWindow < Gosu::Window
     camera_x, camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-camera_x, -camera_y) do
       (@space.players + @space.stars).each &:draw
+
+      @space.players.each do |player|
+        @font.draw_rel(player.player_name, player.body.p.x, player.body.p.y - 30, ZOrder::UI, 0.5, 0.5, 1.0, 1.0, 0xffffff00)
+      end
     end
 
     @space.players.sort.each_with_index do |player, num|
