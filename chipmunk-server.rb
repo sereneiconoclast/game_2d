@@ -35,6 +35,14 @@ class Game < Rev::TimerWatcher
 
     # Time increment over which to apply a physics "step" ("delta t")
     @space = GameSpace.new(1.0/60.0) # TODO: Constant
+
+    # This should never happen.  It can only happen client-side because a
+    # registry update may delete an object before we get around to it in
+    # purge_doomed_objects
+    def @space.fire_object_not_found(object)
+      raise "Object #{object} not in registry"
+    end
+
     @space.establish_world(world_width, world_height)
 
     @space.send_registry_updates_every(0.25) # Four times a second.  TODO: Constant

@@ -53,7 +53,7 @@ class Player
     # the bottom; thus 3PI/2 is the top
     @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
 
-    @body.w_limit = 1.2
+    @body.w_limit = 1.0
   end
 
   # Directly set the position and velocity of our Player
