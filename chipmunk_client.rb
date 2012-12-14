@@ -7,6 +7,7 @@
 ## See https://github.com/jlnr/gosu/wiki/Ruby-Chipmunk-Integration for the accompanying text.
 
 require 'rubygems'
+require 'trollop'
 require 'gosu'
 
 $LOAD_PATH << '.'
@@ -20,15 +21,14 @@ require 'zorder'
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 480
 
-HOSTNAME = 'localhost'
-PORT = 4321
+DEFAULT_PORT = 4321
 
 $SUBSTEPS = 0
 
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
-  def initialize(player_name)
+  def initialize(player_name, hostname, port=DEFAULT_PORT)
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Gosu/Chipmunk/Rev Integration Demo"
 
@@ -45,7 +45,7 @@ class GameWindow < Gosu::Window
     # Connect to server and kick off handshaking
     # We will create our player object only after we've been accepted by the server
     # and told our starting position
-    @conn = connect_to_server HOSTNAME, PORT, player_name
+    @conn = connect_to_server hostname, port, player_name
   end
 
   def connect_to_server(hostname, port, player_name)
@@ -194,7 +194,11 @@ class GameWindow < Gosu::Window
   end
 end
 
-player_name = ARGV.shift
-raise "No player name given" unless player_name
-window = GameWindow.new player_name
+opts = Trollop::options do
+  opt :name, "Player name", :type => :string, :required => true
+  opt :hostname, "Hostname of server", :type => :string, :required => true
+  opt :port, "Port number", :default => DEFAULT_PORT
+end
+
+window = GameWindow.new( opts[:name], opts[:hostname], opts[:port] )
 window.show
