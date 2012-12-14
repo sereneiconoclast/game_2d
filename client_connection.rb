@@ -30,7 +30,7 @@ class ClientConnection < Networking
   def on_record(hash)
     world = hash['world']
     if world
-      @game.establish_world(*world)
+      @game.establish_world(world)
     end
 
     handshake_response = hash['you_are']

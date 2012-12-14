@@ -22,19 +22,25 @@ WORLD_HEIGHT = 600
 HOSTNAME = 'localhost'
 PORT = 4321
 
+# Fire event that drives main processing loop 60 times per second
+DELTA_T = 1.0/60.0
+
 # The number of steps to process every Gosu update
 # The Player ship can get going so fast as to "move through" a
 # star without triggering a collision; an increased number of
 # Chipmunk step calls per update will effectively avoid this issue
 $SUBSTEPS = 6
 
+# How many seconds between broadcasts of the registry
+REGISTRY_DELAY=0.25 # Four times a second
+
 class Game < Rev::TimerWatcher
   def initialize
-    super(1.0 / 60.0, true) # Fire event 60 times a second.  TODO: Constant
+    super(DELTA_T, true)
     attach(Rev::Loop.default)
 
-    # Time increment over which to apply a physics "step" ("delta t")
-    @space = GameSpace.new(1.0/60.0) # TODO: Constant
+    # Time increment over which to apply a physics "step"
+    @space = GameSpace.new(DELTA_T)
 
     # This should never happen.  It can only happen client-side because a
     # registry update may delete an object before we get around to it in
@@ -45,7 +51,7 @@ class Game < Rev::TimerWatcher
 
     @space.establish_world(world_width, world_height)
 
-    @space.send_registry_updates_every(0.25) # Four times a second.  TODO: Constant
+    @space.send_registry_updates_every(REGISTRY_DELAY)
 
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # Also note that both Shapes involved in the collision are passed into the closure
@@ -64,6 +70,8 @@ class Game < Rev::TimerWatcher
 
   def world_width; WORLD_WIDTH; end
   def world_height; WORLD_HEIGHT; end
+  def delta_t; DELTA_T; end
+  def substeps; $SUBSTEPS; end
 
   def add_player(conn, player_name)
     player = Player.new(conn, player_name)

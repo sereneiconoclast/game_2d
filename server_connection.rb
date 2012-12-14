@@ -20,7 +20,12 @@ class ServerConnection < Networking
 
     response = {
       'you_are' => @player,
-      'world' => [ @game.world_width, @game.world_height ],
+      'world' => {
+        :width => @game.world_width,
+        :height => @game.world_height,
+        :delta_t => @game.delta_t,
+        :substeps => @game.substeps,
+      },
       'add_players' => other_players,
       'add_stars' => @game.get_all_stars
     }

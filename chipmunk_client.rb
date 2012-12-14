@@ -23,13 +23,7 @@ SCREEN_HEIGHT = 480
 HOSTNAME = 'localhost'
 PORT = 4321
 
-# The number of steps to process every Gosu update
-# The Player ship can get going so fast as to "move through" a
-# star without triggering a collision; an increased number of
-# Chipmunk step calls per update will effectively avoid this issue
-# TODO: Get from server
-$SUBSTEPS = 6
-
+$SUBSTEPS = 0
 
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
@@ -48,10 +42,25 @@ class GameWindow < Gosu::Window
 
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
 
-    @space = GameSpace.new(1.0/60.0) # TODO: Get from server
+    # Connect to server and kick off handshaking
+    # We will create our player object only after we've been accepted by the server
+    # and told our starting position
+    @conn = connect_to_server HOSTNAME, PORT, player_name
+  end
+
+  def connect_to_server(hostname, port, player_name)
+    conn = ClientConnection.connect(hostname, port)
+    conn.attach(Rev::Loop.default)
+    conn.setup(self, player_name)
+  end
+
+  def establish_world(world)
+    @space = GameSpace.new(world['delta_t'])
 
     # No action for fire_object_not_found
     # We may remove an object during a registry update that we were about to doom
+
+    @space.establish_world(world['width'], world['height'])
 
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # Also note that both Shapes involved in the collision are passed into the closure
@@ -65,20 +74,13 @@ class GameWindow < Gosu::Window
       end
     end
 
-    # Connect to server and kick off handshaking
-    # We will create our player object only after we've been accepted by the server
-    # and told our starting position
-    @conn = connect_to_server HOSTNAME, PORT, player_name
-  end
-
-  def connect_to_server(hostname, port, player_name)
-    conn = ClientConnection.connect(hostname, port)
-    conn.attach(Rev::Loop.default)
-    conn.setup(self, player_name)
-  end
-
-  def establish_world(width, height)
-    @space.establish_world(width, height)
+    # The number of steps to process every Gosu update
+    # The Player ship can get going so fast as to "move through" a
+    # star without triggering a collision; an increased number of
+    # Chipmunk step calls per update will effectively avoid this issue
+    #
+    # Until this is set, update() does nothing.  So we set this last
+    $SUBSTEPS = world['substeps']
   end
 
   def create_local_player(json)
