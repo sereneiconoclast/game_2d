@@ -31,6 +31,7 @@ class ServerPort
 
   def broadcast(data, reliable=false, channel=1)
     @server.broadcast_packet data.to_json, reliable, channel
+    @server.flush
   end
 
   def update(timeout=0) # non-blocking by default

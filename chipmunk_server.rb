@@ -16,8 +16,8 @@ require 'game_space'
 require 'player'
 require 'star'
 
-WORLD_WIDTH = 900
-WORLD_HEIGHT = 600
+WORLD_WIDTH = 640
+WORLD_HEIGHT = 480
 
 PORT = 4321
 MAX_CLIENTS = 32
@@ -105,10 +105,13 @@ class Game
         server_port.update(1000 / 60)
 
         # Step the physics environment $SUBSTEPS times each update
-        $SUBSTEPS.times { @space.update }
+        $SUBSTEPS.times do
+          @space.update
+          server_port.update
+        end
 
         # Each update (not SUBSTEP) we see if we need to add more Stars
-        if rand(100) < 4 and @space.stars.size < 8 then
+        if rand(100) < 4 and @space.stars.size < 4 then
           star = Star.new(rand * world_width, rand * world_height)
           star.generate_id
           @space << star

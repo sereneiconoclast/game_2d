@@ -66,5 +66,6 @@ class ClientConnection < ENet::Connection
 
   def send_record(data, reliable=false)
     send_packet(data.to_json, reliable, 0)
+    flush
   end
 end

@@ -72,5 +72,6 @@ class ServerConnection
     send_str = hash.to_json
     # Send data to the client (client ID, data, reliable or not, channel ID)
     @server.send_packet(@id, send_str, reliable, channel)
+    @server.flush
   end
 end
