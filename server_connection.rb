@@ -28,7 +28,7 @@ class ServerConnection
       'add_players' => other_players,
       'add_stars' => @game.get_all_stars
     }
-    puts "#{@player} logs in from #{@remote_addr}:#{@remote_port}"
+    puts "#{@player} logs in from #{@remote_addr}"
     send_record response, true # answer handshake reliably
   end
 
