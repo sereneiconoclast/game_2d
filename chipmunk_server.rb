@@ -40,6 +40,13 @@ class Game
     @space = GameSpace.new(DELTA_T)
 
     # This should never happen.  It can only happen client-side because a
+    # registry update may create an object before we get around to it in,
+    # say, add_star
+    def @space.fire_duplicate_id(old_object, new_object)
+      raise "#{old_object} and #{new_object} have same ID!"
+    end
+
+    # This should never happen.  It can only happen client-side because a
     # registry update may delete an object before we get around to it in
     # purge_doomed_objects
     def @space.fire_object_not_found(object)
@@ -111,7 +118,7 @@ class Game
         @space.check_for_registry_leaks
       end # REGISTRY_BROADCAST_EVERY.times
 
-      server_port.broadcast @space.registry
+      server_port.broadcast :registry => @space.registry
     end # loop
   end
 

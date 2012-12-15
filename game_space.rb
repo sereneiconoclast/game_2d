@@ -91,15 +91,23 @@ class GameSpace
     end
   end
 
+  # Override to be informed when trying to add an object that
+  # we already have (registry ID clash)
+  def fire_duplicate_id(old_object, new_object); end
+
   # Add an object
   def <<(obj)
     reg_id = obj.registry_id
-    raise "#{obj} and #{self[reg_id]} have same ID!" if self[reg_id]
-    @registry[reg_id] = obj
-    object_list(obj) << obj
-    @real_space.add_body(obj.body)
-    @real_space.add_shape(obj.shape)
-    obj
+    if old = self[reg_id]
+      fire_duplicate_id(old, obj)
+      old
+    else
+      @registry[reg_id] = obj
+      object_list(obj) << obj
+      @real_space.add_body(obj.body)
+      @real_space.add_shape(obj.shape)
+      obj
+    end
   end
 
   # Doom an object (mark it to be deleted but don't remove it yet)
