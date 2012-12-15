@@ -131,7 +131,7 @@ class Player
 
     return if @moves.empty?
 
-    puts "#{@player_name} processing a move (#{@moves.size} in queue)"
+    # puts "#{@player_name} processing a move (#{@moves.size} in queue)"
     move = @moves.shift
     if [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? move
       send move

@@ -1,33 +1,39 @@
-require 'networking'
+require 'renet'
+require 'json'
 
-# The client calls ClientConnection.connect() to create one of these.
-# It is then used for all communication between them.
+# The client creates one of these.
+# It is then used for all communication with the server.
 
-class ClientConnection < Networking
+class ClientConnection < ENet::Connection
   attr_reader :player_name
 
-  def self.connect(host, port, *args)
-    super
-  end
-
-  def setup(game, player_name)
+  def initialize(host, port, game, player_name, timeout=2000)
+    # remote host address, remote host port, channels, download bandwidth, upload bandwidth
+    super(host, port, 2, 0, 0)
     @game = game
     @player_name = player_name
-    self
+
+    on_connection(method(:on_connect))
+    on_disconnection(method(:on_close))
+    on_packet_receive(method(:on_packet))
+
+    connect(timeout)
   end
 
   def on_connect
-    super
-    puts "Connected to server #{remote_addr}:#{remote_port}; sending handshake"
-    send_record :handshake => { :player_name => @player_name }
+    puts "Connected to server - sending handshake"
+    # send handshake reliably
+    send_record( { :handshake => { :player_name => @player_name } }, true)
   end
 
   def on_close
-    puts "Client disconnected"
-    @game.close
+    puts "Client disconnected by server"
+    @game.shutdown
   end
 
-  def on_record(hash)
+  def on_packet(data, channel)
+    hash = JSON.parse data
+
     world = hash['world']
     if world
       @game.establish_world(world)
@@ -56,5 +62,9 @@ class ClientConnection < Networking
 
   def send_move(move)
     send_record(:move => move.to_s) if move
+  end
+
+  def send_record(data, reliable=false)
+    send_packet(data.to_json, reliable, 0)
   end
 end

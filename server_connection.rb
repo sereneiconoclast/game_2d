@@ -1,14 +1,13 @@
-require 'networking'
+require 'json'
 
-# An instance of this class is created by Rev::TCPServer whenever an
+# An instance of this class is created by ServerPort whenever an
 # incoming connection is accepted.
 
-class ServerConnection < Networking
+class ServerConnection
 
-  def setup(game)
-    @game = game
-    @remote_addr, @remote_port = remote_addr, remote_port
-    puts "setup(): #{@remote_addr}:#{@remote_port} connected"
+  def initialize(game, server, id, remote_addr)
+    @game, @server, @id, @remote_addr = game, server, id, remote_addr
+    puts "ServerConnection: New connection #{id} from #{remote_addr}"
   end
 
   def answer_handshake(handshake)
@@ -30,7 +29,7 @@ class ServerConnection < Networking
       'add_stars' => @game.get_all_stars
     }
     puts "#{@player} logs in from #{@remote_addr}:#{@remote_port}"
-    send_record response
+    send_record response, true # answer handshake reliably
   end
 
   def add_star(star)
@@ -49,22 +48,29 @@ class ServerConnection < Networking
     send_record 'update_score' => { player.registry_id => player.score }
   end
 
-  def on_close
-    puts "#{@player} -- #{@remote_addr}:#{@remote_port} disconnected"
+  def close
+    puts "#{@player} -- #{@remote_addr} disconnected"
     @game.delete_player @player
   end
 
-  def on_record(data)
-    if (handshake = data['handshake'])
+  def on_packet(data, channel)
+    hash = JSON.parse data
+    if (handshake = hash['handshake'])
       answer_handshake(handshake)
-    elsif (move = data['move'])
+    elsif (move = hash['move'])
       @player.add_move move.to_sym
     else
-      puts "IGNORING BAD DATA: #{data.inspect}"
+      puts "IGNORING BAD DATA: #{hash.inspect}"
     end
   end
 
   def send_registry(registry)
     send_record :registry => registry
+  end
+
+  def send_record(hash, reliable=false, channel=0)
+    send_str = hash.to_json
+    # Send data to the client (client ID, data, reliable or not, channel ID)
+    @server.send_packet(@id, send_str, reliable, channel)
   end
 end

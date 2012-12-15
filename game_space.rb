@@ -1,6 +1,5 @@
 require 'rubygems'
 require 'chipmunk_utilities'
-require 'rev'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).
@@ -13,18 +12,6 @@ require 'rev'
 # at the wrong time (during collision processing).
 
 GRAVITY = 10.0
-
-class RegistryUpdater < Rev::TimerWatcher
-  def initialize(space, interval)
-    super(interval, true) # Fire event every 'interval' seconds
-    attach(Rev::Loop.default)
-    @space = space
-  end
-
-  def on_timer
-    @space.send_registry_updates_now
-  end
-end
 
 class GameSpace
   attr_reader :registry, :players, :stars, :width, :height
@@ -157,15 +144,6 @@ class GameSpace
     if expected != actual
       raise "We have #{expected} game objects, #{actual} in registry (delta: #{actual - expected})"
     end
-  end
-
-  # Used server-side only.  Send registry updates to players
-  def send_registry_updates_every(interval)
-    RegistryUpdater.new(self, interval)
-  end
-
-  def send_registry_updates_now
-    @players.each {|p| p.conn.send_registry(@registry) }
   end
 
   # Used client-side only.  Determine an appropriate camera position,

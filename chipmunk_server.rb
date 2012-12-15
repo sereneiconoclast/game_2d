@@ -11,7 +11,7 @@ require 'gosu'
 
 $LOAD_PATH << '.'
 require 'chipmunk_utilities'
-require 'server_connection'
+require 'server_port'
 require 'game_space'
 require 'player'
 require 'star'
@@ -19,10 +19,10 @@ require 'star'
 WORLD_WIDTH = 900
 WORLD_HEIGHT = 600
 
-HOSTNAME = 'localhost'
 PORT = 4321
+MAX_CLIENTS = 32
 
-# Fire event that drives main processing loop 60 times per second
+# Tell physics engine to expect 60 updates per second
 DELTA_T = 1.0/60.0
 
 # The number of steps to process every Gosu update
@@ -31,14 +31,11 @@ DELTA_T = 1.0/60.0
 # Chipmunk step calls per update will effectively avoid this issue
 $SUBSTEPS = 6
 
-# How many seconds between broadcasts of the registry
-REGISTRY_DELAY=0.25 # Four times a second
+# How many cycles between broadcasts of the registry
+REGISTRY_BROADCAST_EVERY=60 / 4 # Four times a second
 
-class Game < Rev::TimerWatcher
+class Game
   def initialize
-    super(DELTA_T, true)
-    attach(Rev::Loop.default)
-
     # Time increment over which to apply a physics "step"
     @space = GameSpace.new(DELTA_T)
 
@@ -50,8 +47,6 @@ class Game < Rev::TimerWatcher
     end
 
     @space.establish_world(world_width, world_height)
-
-    @space.send_registry_updates_every(REGISTRY_DELAY)
 
     # Here we define what is supposed to happen when a Player (ship) collides with a Star
     # Also note that both Shapes involved in the collision are passed into the closure
@@ -96,26 +91,35 @@ class Game < Rev::TimerWatcher
     @space.stars
   end
 
-  def on_timer
-    # Step the physics environment $SUBSTEPS times each update
-    $SUBSTEPS.times { @space.update }
+  def run(server_port)
+    loop do
+      REGISTRY_BROADCAST_EVERY.times do
+        # Send/receive packets for 1/60th second
+        server_port.update(1000 / 60)
 
-    # Each update (not SUBSTEP) we see if we need to add more Stars
-    if rand(100) < 4 and @space.stars.size < 8 then
-      star = Star.new(rand * world_width, rand * world_height)
-      star.generate_id
-      @space << star
-      @space.players.each {|p| p.conn.add_star star }
-    end
+        # Step the physics environment $SUBSTEPS times each update
+        $SUBSTEPS.times { @space.update }
 
-    @space.check_for_registry_leaks
+        # Each update (not SUBSTEP) we see if we need to add more Stars
+        if rand(100) < 4 and @space.stars.size < 8 then
+          star = Star.new(rand * world_width, rand * world_height)
+          star.generate_id
+          @space << star
+          @space.players.each {|p| p.conn.add_star star }
+        end
+
+        @space.check_for_registry_leaks
+      end # REGISTRY_BROADCAST_EVERY.times
+
+      server_port.broadcast @space.registry
+    end # loop
   end
+
 end
 
 game = Game.new
 
-server = Rev::TCPServer.new(HOSTNAME, PORT, ServerConnection) {|conn| conn.setup(game) }
-server.attach(Rev::Loop.default)
+server_port = ServerPort.new(game, PORT, MAX_CLIENTS)
 
-puts "Rev server listening on #{HOSTNAME}:#{PORT}"
-Rev::Loop.default.run
+puts "ENet server listening on #{PORT}"
+game.run(server_port)

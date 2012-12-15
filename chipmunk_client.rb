@@ -30,7 +30,7 @@ $SUBSTEPS = 0
 class GameWindow < Gosu::Window
   def initialize(player_name, hostname, port=DEFAULT_PORT)
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
-    self.caption = "Gosu/Chipmunk/Rev Integration Demo"
+    self.caption = "Gosu/Chipmunk/ENet Integration Demo"
 
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
 
@@ -45,13 +45,7 @@ class GameWindow < Gosu::Window
     # Connect to server and kick off handshaking
     # We will create our player object only after we've been accepted by the server
     # and told our starting position
-    @conn = connect_to_server hostname, port, player_name
-  end
-
-  def connect_to_server(hostname, port, player_name)
-    conn = ClientConnection.connect(hostname, port)
-    conn.attach(Rev::Loop.default)
-    conn.setup(self, player_name)
+    @conn = ClientConnection.new(hostname, port, self, player_name)
   end
 
   def establish_world(world)
@@ -106,8 +100,9 @@ class GameWindow < Gosu::Window
   end
 
   def update
-    # Handle any pending Rev events
-    Rev::Loop.default.run_nonblock
+    # Handle any pending ENet events
+    @conn.update(0) # non-blocking
+    return unless @conn.online?
 
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
@@ -125,11 +120,10 @@ class GameWindow < Gosu::Window
     star = ClientStar.new(x, y, x_vel, y_vel)
     star.registry_id = json['registry_id']
     @space << star
-    puts "Added #{star}"
+    # puts "Added #{star}"
   end
 
   def add_stars(star_array)
-    #puts "Adding #{star_array.size} stars"
     star_array.each {|json| add_star(json) }
   end
 
@@ -166,8 +160,13 @@ class GameWindow < Gosu::Window
 
   def button_down(id)
     if id == Gosu::KbEscape
-      close
+      shutdown
     end
+  end
+
+  def shutdown
+    @conn.disconnect(200)
+    close
   end
 
   def sync_registry(server_registry)
