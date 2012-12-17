@@ -46,6 +46,8 @@ class GameWindow < Gosu::Window
     # We will create our player object only after we've been accepted by the server
     # and told our starting position
     @conn = ClientConnection.new(hostname, port, self, player_name)
+
+    @last_update = Time.now.to_r
   end
 
   def establish_world(world)
@@ -100,17 +102,31 @@ class GameWindow < Gosu::Window
   end
 
   def update
+    # Gosu calls update() every 16 ms.  This results in about 62 updates per second.
+    # We need to get this as close to 60 updates per second as possible.
+    # Otherwise the client will run ahead of the server, sending too many
+    # commands, which queue up on the server side and cause the two to fall badly
+    # out of sync.
+    sleeping = (@last_update + Rational(1, 60)) - Time.now.to_r
+    sleep(sleeping) if sleeping > 0.0
+
+    # Record the time -after- the sleep
+    @last_update = Time.now.to_r
+
     # Handle any pending ENet events
     @conn.update(0) # non-blocking
     return unless @conn.online?
 
+    # Player at the keyboard queues up a command
+    @player.handle_input if @player
+
+    # All players dequeue moves
+    @space.dequeue_player_moves
+
     # Step the physics environment $SUBSTEPS times each update
     $SUBSTEPS.times do
-
-      # Player at the keyboard queues up a command
-      @player.handle_input if @player
-
       @space.update
+      @conn.update(0)
     end
   end
 

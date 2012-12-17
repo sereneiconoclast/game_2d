@@ -21,6 +21,7 @@ class Player
     @player_name = player_name
     @score = 0
     @moves = []
+    @current_move = nil
 
     # Create the Body for the Player
     @body = CP::Body.new(10.0, 150.0)
@@ -126,18 +127,24 @@ class Player
   end
 
   def dequeue_move
+    @current_move = @moves.shift
+  end
+
+  def execute_move
     reset_for_next_move
     slow_rotation
 
-    return if @moves.empty?
+    return unless @current_move
 
     # puts "#{@player_name} processing a move (#{@moves.size} in queue)"
-    move = @moves.shift
-    if [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? move
-      send move
-      return move
+    if @current_move.is_a? Hash
+      @conn.send_record :pong => @current_move
+      return nil
+    elsif [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? @current_move
+      send @current_move
+      return @current_move
     else
-      puts "Invalid move for #{self}: #{move}"
+      puts "Invalid move for #{self}: #{@current_move}"
       return nil
     end
   end
@@ -207,7 +214,9 @@ class LocalPlayer < ClientPlayer
   end
 
   def handle_input
-    add_move move_for_keypress
+    move = move_for_keypress
+    @conn.send_move move
+    add_move move
   end
 
   # Check keyboard, return a motion symbol or nil
@@ -222,10 +231,7 @@ class LocalPlayer < ClientPlayer
         :accelerate
       end
     when @window.button_down?(Gosu::KbDown) then :reverse
+    when @window.button_down?(Gosu::KbP) then @conn.send_ping
     end
-  end
-
-  def dequeue_move
-    @conn.send_move(super)
   end
 end

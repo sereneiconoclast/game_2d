@@ -34,6 +34,12 @@ class ClientConnection < ENet::Connection
   def on_packet(data, channel)
     hash = JSON.parse data
 
+    pong = hash['pong']
+    if pong
+      stop = Time.now.to_f
+      puts "Ping took #{stop - pong['start']} seconds"
+    end
+
     world = hash['world']
     if world
       @game.establish_world(world)
@@ -62,6 +68,10 @@ class ClientConnection < ENet::Connection
 
   def send_move(move)
     send_record(:move => move.to_s) if move
+  end
+
+  def send_ping
+    send_record :ping => { :start => Time.now.to_f }
   end
 
   def send_record(data, reliable=false)

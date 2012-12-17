@@ -133,12 +133,15 @@ class GameSpace
     @doomed.clear
   end
 
+  def dequeue_player_moves
+    @players.each &:dequeue_move
+  end
+
   def update
     purge_doomed_objects
 
     # Process commands by all players
-    # For the local player, also sends command to server
-    @players.each &:dequeue_move
+    @players.each &:execute_move
 
     # Perform the step over @dt period of time
     # For best performance @dt should remain consistent for the game

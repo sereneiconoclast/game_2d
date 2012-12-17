@@ -100,9 +100,10 @@ class Game
 
   def run(server_port)
     loop do
-      REGISTRY_BROADCAST_EVERY.times do
-        # Send/receive packets for 1/60th second
-        server_port.update(1000 / 60)
+
+      cycle_start = Time.now.to_r
+      60.times do |n|
+        @space.dequeue_player_moves
 
         # Step the physics environment $SUBSTEPS times each update
         $SUBSTEPS.times do
@@ -119,10 +120,17 @@ class Game
         end
 
         @space.check_for_registry_leaks
-      end # REGISTRY_BROADCAST_EVERY.times
 
-      server_port.broadcast :registry => @space.registry
-    end # loop
+        server_port.broadcast(:registry => @space.registry) if (n % REGISTRY_BROADCAST_EVERY == 0)
+
+        # This results in almost exactly 60 updates per second
+        desired_time = cycle_start + Rational((n + 1), 60)
+        while Time.now.to_r < desired_time do
+          server_port.update
+        end
+      end # 60.times
+
+    end # infinite loop
   end
 
 end
