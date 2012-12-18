@@ -70,6 +70,10 @@ class ClientConnection < ENet::Connection
     send_record(:move => move.to_s) if move
   end
 
+  def send_create_npc(npc)
+    send_record(:create_npc => npc)
+  end
+
   def send_ping
     send_record :ping => { :start => Time.now.to_f }
   end

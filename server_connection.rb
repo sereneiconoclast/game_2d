@@ -59,6 +59,8 @@ class ServerConnection
       answer_handshake(handshake)
     elsif (move = hash['move'])
       @player.add_move move.to_sym
+    elsif (npc = hash['create_npc'])
+      @game.create_npc npc
     elsif (ping = hash['ping'])
       @player.add_move ping
     else

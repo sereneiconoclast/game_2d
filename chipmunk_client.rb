@@ -33,6 +33,7 @@ class GameWindow < Gosu::Window
     self.caption = "Gosu/Chipmunk/ENet Integration Demo"
 
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
+    @cursor_anim = Gosu::Image::load_tiles(self, "media/crosshair.gif", 40, 40, false)
 
     # Load NPC animation using window
     ClientNPC.load_animation(self)
@@ -157,8 +158,8 @@ class GameWindow < Gosu::Window
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
     return unless @player
-    camera_x, camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
-    translate(-camera_x, -camera_y) do
+    @camera_x, @camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
+    translate(-@camera_x, -@camera_y) do
       (@space.players + @space.npcs).each &:draw
 
       @space.players.each do |player|
@@ -169,12 +170,24 @@ class GameWindow < Gosu::Window
     @space.players.sort.each_with_index do |player, num|
       @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::UI, 1.0, 1.0, 0xffffff00)
     end
+
+    cursor_img = @cursor_anim[Gosu::milliseconds / 50 % @cursor_anim.size]
+    cursor_img.draw(
+      mouse_x - cursor_img.width / 2.0,
+      mouse_y - cursor_img.height / 2.0,
+      ZOrder::UI,
+      1, 1, 0xffffffff, :add)
   end
 
   def button_down(id)
-    if id == Gosu::KbEscape
-      shutdown
+    case id
+      when Gosu::KbEscape then shutdown
+      when Gosu::MsLeft then create_npc
     end
+  end
+
+  def create_npc
+    @conn.send_create_npc(:x => (mouse_x - @camera_x), :y => (mouse_y - @camera_y))
   end
 
   def shutdown

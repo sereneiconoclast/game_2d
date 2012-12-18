@@ -87,8 +87,8 @@ class Game
     @space.players.each {|other| other.conn.delete_player player }
   end
 
-  def add_npc
-    npc = NPC.new(rand * world_width, rand * world_height)
+  def create_npc(npc)
+    npc = NPC.new(npc['x'], npc['y'])
     npc.generate_id
     @space << npc
     @space.players.each {|p| p.conn.add_npc npc }
