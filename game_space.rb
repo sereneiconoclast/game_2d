@@ -14,7 +14,7 @@ require 'chipmunk_utilities'
 GRAVITY = 10.0
 
 class GameSpace
-  attr_reader :registry, :players, :stars, :width, :height
+  attr_reader :registry, :players, :npcs, :width, :height
 
   def initialize(delta_t)
     # Extending CP::Space seems to be a bad thing to do (SEGV).
@@ -23,11 +23,6 @@ class GameSpace
 
     # Time increment over which to apply a physics "step" ("delta t")
     @dt = delta_t
-
-    # A damping of 0.8 causes the ship bleed off its force and torque over time
-    # This is not realistic behavior in a vacuum of space, but it gives the game
-    # the feel I'd like in this situation
-    # @real_space.damping = 0.8
 
     @real_space.gravity = CP::Vec2.new(0.0, GRAVITY)
 
@@ -41,7 +36,7 @@ class GameSpace
     @doomed = []
 
     @players = Array.new
-    @stars = Array.new
+    @npcs = Array.new
   end
 
   def method_missing(sym, *args, &blk)
@@ -86,7 +81,7 @@ class GameSpace
   def object_list(obj)
     case obj
     when Player then @players
-    when Star then @stars
+    when NPC then @npcs
     else raise "Unknown object type: #{obj} (#{obj.class})"
     end
   end
@@ -150,7 +145,7 @@ class GameSpace
 
   # Assertion.  Used server-side only
   def check_for_registry_leaks
-    expected = @players.size + @stars.size
+    expected = @players.size + @npcs.size
     actual = @registry.size
     if expected != actual
       raise "We have #{expected} game objects, #{actual} in registry (delta: #{actual - expected})"

@@ -15,7 +15,7 @@ require 'chipmunk_utilities'
 require 'client_connection'
 require 'game_space'
 require 'player'
-require 'star'
+require 'npc'
 require 'zorder'
 
 SCREEN_WIDTH = 640
@@ -34,8 +34,8 @@ class GameWindow < Gosu::Window
 
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
 
-    # Load star animation using window
-    ClientStar.load_animation(self)
+    # Load NPC animation using window
+    ClientNPC.load_animation(self)
 
     # Put the beep here, as it is the environment now that determines collision
     @beep = Gosu::Sample.new(self, "media/Beep.wav")
@@ -58,22 +58,19 @@ class GameWindow < Gosu::Window
 
     @space.establish_world(world['width'], world['height'])
 
-    # Here we define what is supposed to happen when a Player (ship) collides with a Star
+    # Here we define what is supposed to happen when a Player (ship) collides with an NPC
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
-    @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
-      star = star_shape.body.object
-      unless @space.doomed? star # filter out duplicate collisions
+    @space.add_collision_func(:ship, :npc) do |ship_shape, npc_shape|
+      npc = npc_shape.body.object
+      unless @space.doomed? npc # filter out duplicate collisions
         @beep.play
-        @space.doom star
+        @space.doom npc
         # remember to return 'true' if we want regular collision handling
       end
     end
 
     # The number of steps to process every Gosu update
-    # The Player ship can get going so fast as to "move through" a
-    # star without triggering a collision; an increased number of
-    # Chipmunk step calls per update will effectively avoid this issue
     #
     # Until this is set, update() does nothing.  So we set this last
     $SUBSTEPS = world['substeps']
@@ -130,17 +127,17 @@ class GameWindow < Gosu::Window
     end
   end
 
-  def add_star(json)
+  def add_npc(json)
     x, y = json['position']
     x_vel, y_vel = json['velocity']
-    star = ClientStar.new(x, y, x_vel, y_vel)
-    star.registry_id = json['registry_id']
-    @space << star
-    # puts "Added #{star}"
+    npc = ClientNPC.new(x, y, x_vel, y_vel)
+    npc.registry_id = json['registry_id']
+    @space << npc
+    # puts "Added #{npc}"
   end
 
-  def add_stars(star_array)
-    star_array.each {|json| add_star(json) }
+  def add_npcs(npc_array)
+    npc_array.each {|json| add_npc(json) }
   end
 
   def add_players(players)
@@ -162,7 +159,7 @@ class GameWindow < Gosu::Window
     return unless @player
     camera_x, camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-camera_x, -camera_y) do
-      (@space.players + @space.stars).each &:draw
+      (@space.players + @space.npcs).each &:draw
 
       @space.players.each do |player|
         @font.draw_rel(player.player_name, player.body.p.x, player.body.p.y - 30, ZOrder::UI, 0.5, 0.5, 1.0, 1.0, 0xffffff00)
@@ -197,7 +194,7 @@ class GameWindow < Gosu::Window
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
         case clazz
-        when 'Star' then add_star(json)
+        when 'NPC' then add_npc(json)
         when 'Player' then add_player(json)
         else raise "Unsupported class #{clazz}"
         end

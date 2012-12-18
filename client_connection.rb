@@ -50,8 +50,8 @@ class ClientConnection < ENet::Connection
       @game.create_local_player handshake_response
     end
 
-    stars = hash['add_stars']
-    @game.add_stars(stars) if stars
+    npcs = hash['add_npcs']
+    @game.add_npcs(npcs) if npcs
 
     players = hash['add_players']
     @game.add_players(players) if players

@@ -26,14 +26,14 @@ class ServerConnection
         :substeps => @game.substeps,
       },
       'add_players' => other_players,
-      'add_stars' => @game.get_all_stars
+      'add_npcs' => @game.get_all_npcs
     }
     puts "#{@player} logs in from #{@remote_addr}"
     send_record response, true # answer handshake reliably
   end
 
-  def add_star(star)
-    send_record 'add_stars' => [ star ]
+  def add_npc(npc)
+    send_record 'add_npcs' => [ npc ]
   end
 
   def add_player(player)

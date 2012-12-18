@@ -14,7 +14,7 @@ require 'chipmunk_utilities'
 require 'server_port'
 require 'game_space'
 require 'player'
-require 'star'
+require 'npc'
 
 WORLD_WIDTH = 640
 WORLD_HEIGHT = 480
@@ -26,9 +26,6 @@ MAX_CLIENTS = 32
 DELTA_T = 1.0/60.0
 
 # The number of steps to process every Gosu update
-# The Player ship can get going so fast as to "move through" a
-# star without triggering a collision; an increased number of
-# Chipmunk step calls per update will effectively avoid this issue
 $SUBSTEPS = 6
 
 # How many cycles between broadcasts of the registry
@@ -41,7 +38,7 @@ class Game
 
     # This should never happen.  It can only happen client-side because a
     # registry update may create an object before we get around to it in,
-    # say, add_star
+    # say, add_npc
     def @space.fire_duplicate_id(old_object, new_object)
       raise "#{old_object} and #{new_object} have same ID!"
     end
@@ -55,16 +52,16 @@ class Game
 
     @space.establish_world(world_width, world_height)
 
-    # Here we define what is supposed to happen when a Player (ship) collides with a Star
+    # Here we define what is supposed to happen when a Player (ship) collides with an NPC
     # Also note that both Shapes involved in the collision are passed into the closure
     # in the same order that their collision_types are defined in the add_collision_func call
-    @space.add_collision_func(:ship, :star) do |ship_shape, star_shape|
-      star = star_shape.body.object
-      unless @space.doomed? star # filter out duplicate collisions
+    @space.add_collision_func(:ship, :npc) do |ship_shape, npc_shape|
+      npc = npc_shape.body.object
+      unless @space.doomed? npc # filter out duplicate collisions
         player = ship_shape.body.object
         player.score += 10
         @space.players.each {|p| p.conn.update_score player }
-        @space.doom star
+        @space.doom npc
         # remember to return 'true' if we want regular collision handling
       end
     end
@@ -90,12 +87,19 @@ class Game
     @space.players.each {|other| other.conn.delete_player player }
   end
 
+  def add_npc
+    npc = NPC.new(rand * world_width, rand * world_height)
+    npc.generate_id
+    @space << npc
+    @space.players.each {|p| p.conn.add_npc npc }
+  end
+
   def get_all_players
     @space.players
   end
 
-  def get_all_stars
-    @space.stars
+  def get_all_npcs
+    @space.npcs
   end
 
   def run(server_port)
@@ -109,14 +113,6 @@ class Game
         $SUBSTEPS.times do
           @space.update
           server_port.update
-        end
-
-        # Each update (not SUBSTEP) we see if we need to add more Stars
-        if rand(100) < 4 and @space.stars.size < 4 then
-          star = Star.new(rand * world_width, rand * world_height)
-          star.generate_id
-          @space << star
-          @space.players.each {|p| p.conn.add_star star }
         end
 
         @space.check_for_registry_leaks

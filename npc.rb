@@ -3,7 +3,7 @@ require 'gosu'
 require 'zorder'
 require 'registerable'
 
-class Star
+class NPC
   include Registerable
   attr_reader :body, :shape
 
@@ -11,7 +11,7 @@ class Star
     @body = CP::Body.new(0.0001, 0.0001)
     @body.object = self
     @shape = CP::Shape::Circle.new(body, 25/2, CP::Vec2.new(0.0, 0.0))
-    @shape.collision_type = :star
+    @shape.collision_type = :npc
 
     @shape.e = 0.99 # elasticity
     @shape = shape
@@ -21,7 +21,7 @@ class Star
   end
 
   def to_s
-    "STAR (#{registry_id})"
+    "NPC (#{registry_id})"
   end
 
   def to_json(*args)
@@ -30,7 +30,7 @@ class Star
 
   def as_json
     {
-      :class => 'Star',
+      :class => 'NPC',
       :registry_id => registry_id,
       :position => [ @body.p.x, @body.p.y ],
       :velocity => [ @body.v.x, @body.v.y ]
@@ -45,9 +45,9 @@ class Star
   end
 end
 
-class ClientStar < Star
+class ClientNPC < NPC
   def self.load_animation(window)
-    @@animation = Gosu::Image::load_tiles(window, "media/Star.png", 25, 25, false)
+    @@animation = Gosu::Image::load_tiles(window, "media/tele.gif", 40, 40, false)
   end
 
   def initialize(x, y, x_vel, y_vel)
@@ -60,6 +60,6 @@ class ClientStar < Star
 
   def draw
     img = @@animation[Gosu::milliseconds / 100 % @@animation.size];
-    img.draw(@body.p.x - img.width / 2.0, @body.p.y - img.height / 2.0, ZOrder::Stars, 1, 1, @color, :add)
+    img.draw(@body.p.x - img.width / 2.0, @body.p.y - img.height / 2.0, ZOrder::Objects, 1, 1, @color, :add)
   end
 end

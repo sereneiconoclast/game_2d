@@ -201,7 +201,7 @@ class ClientPlayer < Player
   end
 
   def draw
-    @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Player, @body.a.radians_to_gosu)
+    @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Objects, @body.a.radians_to_gosu)
   end
 end
 
