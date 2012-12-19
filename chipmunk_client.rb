@@ -44,12 +44,23 @@ class GameWindow < Gosu::Window
 
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
 
+    # Local settings
+    @local = {
+      :create_npc => {
+        :snap => false,
+      },
+    }
+    snap_text = lambda do |item|
+      @local[:create_npc][:snap] ? "Turn snap off" : "Turn snap on"
+    end
+
     submenu = Menu.new('Main menu', self, @font,
-      MenuItem.new('two', self, @font) { puts "Two!" }
+      MenuItem.new(snap_text, self, @font) do |item|
+        @local[:create_npc][:snap] = !@local[:create_npc][:snap]
+      end
     )
     main_menu = Menu.new('Main menu', self, @font,
-      MenuItem.new('one', self, @font) { puts "One!" },
-      MenuItem.new('submenu', self, @font) { submenu },
+      MenuItem.new('Object creation', self, @font) { submenu },
       MenuItem.new('Quit!', self, @font) { shutdown }
     )
     @menu = @top_menu = MenuItem.new('Click for menu', self, @font) { main_menu }
@@ -209,7 +220,13 @@ class GameWindow < Gosu::Window
   end
 
   def create_npc
-    @conn.send_create_npc(:x => (mouse_x - @camera_x), :y => (mouse_y - @camera_y))
+    x, y = (mouse_x - @camera_x), (mouse_y - @camera_y)
+    if @local[:create_npc][:snap]
+      # TODO: Sometimes this can place an object outside the game area.  Fix
+      x = (x / 40).round * 40
+      y = (y / 40).round * 40
+    end
+    @conn.send_create_npc(:x => x, :y => y)
   end
 
   def shutdown

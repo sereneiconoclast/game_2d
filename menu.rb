@@ -14,9 +14,10 @@ class Menu
   end
 
   def draw
-    @font.draw_rel(@name, @window.width - 1, 0, ZOrder::Text, 1.0, 0.0, 1.0, 1.0,
+    str = to_s
+    @font.draw_rel(str, @window.width - 1, 0, ZOrder::Text, 1.0, 0.0, 1.0, 1.0,
       @main_color)
-    x1, x2, y, c = @right - @font.text_width(@name), @right, 20, @main_color
+    x1, x2, y, c = @right - @font.text_width(str), @right, 20, @main_color
     @window.draw_box_at(x1, y, x2, y+1, @main_color)
     @choices.each(&:draw)
   end
@@ -27,10 +28,14 @@ class Menu
   def handle_click
     @choices.collect(&:handle_click).compact.first
   end
+
+  def to_s
+    @name.respond_to?(:call) ? @name.call(self) : @name.to_s
+  end
 end
 
 class MenuItem
-  attr_accessor :x, :y
+  attr_accessor :x, :y, :name
   def initialize(name, window, font, &action)
     @name, @window, @font, @action = name, window, font, action
     @main_color, @select_color, @highlight_color =
@@ -45,7 +50,7 @@ class MenuItem
     (y >= top) && (y < bottom) && (x > left)
   end
 
-  def left; @x - @font.text_width(@name); end
+  def left; @x - @font.text_width(to_s); end
   def right; @x; end
   def top; @y; end
   def bottom; @y + 20; end
@@ -68,8 +73,10 @@ class MenuItem
   # May return simply 'true' if we should redisplay the top-level menu
   def handle_click
     return unless mouse_over?
-    @action.call || true
+    @action.call(self) || true
   end
 
-  def to_s; @name; end
+  def to_s
+    @name.respond_to?(:call) ? @name.call(self) : @name.to_s
+  end
 end
