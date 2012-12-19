@@ -16,6 +16,7 @@ require 'client_connection'
 require 'game_space'
 require 'player'
 require 'npc'
+require 'menu'
 require 'zorder'
 
 SCREEN_WIDTH = 640
@@ -42,6 +43,16 @@ class GameWindow < Gosu::Window
     @beep = Gosu::Sample.new(self, "media/Beep.wav")
 
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
+
+    submenu = Menu.new('Main menu', self, @font,
+      MenuItem.new('two', self, @font) { puts "Two!" }
+    )
+    main_menu = Menu.new('Main menu', self, @font,
+      MenuItem.new('one', self, @font) { puts "One!" },
+      MenuItem.new('submenu', self, @font) { submenu },
+      MenuItem.new('Quit!', self, @font) { shutdown }
+    )
+    @menu = @top_menu = MenuItem.new('Click for menu', self, @font) { main_menu }
 
     # Connect to server and kick off handshaking
     # We will create our player object only after we've been accepted by the server
@@ -163,26 +174,37 @@ class GameWindow < Gosu::Window
       (@space.players + @space.npcs).each &:draw
 
       @space.players.each do |player|
-        @font.draw_rel(player.player_name, player.body.p.x, player.body.p.y - 30, ZOrder::UI, 0.5, 0.5, 1.0, 1.0, 0xffffff00)
+        @font.draw_rel(player.player_name, player.body.p.x, player.body.p.y - 30, ZOrder::Text, 0.5, 0.5, 1.0, 1.0, Gosu::Color::YELLOW)
       end
     end
 
     @space.players.sort.each_with_index do |player, num|
-      @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::UI, 1.0, 1.0, 0xffffff00)
+      @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::Text, 1.0, 1.0, Gosu::Color::YELLOW)
     end
+
+    @menu.draw
 
     cursor_img = @cursor_anim[Gosu::milliseconds / 50 % @cursor_anim.size]
     cursor_img.draw(
       mouse_x - cursor_img.width / 2.0,
       mouse_y - cursor_img.height / 2.0,
-      ZOrder::UI,
-      1, 1, 0xffffffff, :add)
+      ZOrder::Cursor,
+      1, 1, Gosu::Color::WHITE, :add)
+  end
+
+  def draw_box_at(x1, y1, x2, y2, c)
+    draw_quad(x1, y1, c, x2, y1, c, x2, y2, c, x1, y2, c, ZOrder::Highlight)
   end
 
   def button_down(id)
     case id
-      when Gosu::KbEscape then shutdown
-      when Gosu::MsLeft then create_npc
+      when Gosu::KbEscape then @menu = @top_menu
+      when Gosu::MsLeft then
+        if new_menu = @menu.handle_click
+          @menu = (new_menu.respond_to?(:handle_click) ? new_menu : @top_menu)
+        else
+          create_npc
+        end
     end
   end
 

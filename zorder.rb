@@ -1,3 +1,3 @@
 module ZOrder
-  Background, Objects, UI = *0..2
+  Background, Objects, Highlight, Text, Cursor = *0..4
 end
