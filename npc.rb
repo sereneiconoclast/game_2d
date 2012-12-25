@@ -13,6 +13,7 @@ class NPC
     @body.p = CP::Vec2.new(x, y) # position
     @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
     @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+    @body.w_limit = 0.0 # never rotate
 
     shape_array = [
       CP::Vec2.new(-10.5, -10.5),
