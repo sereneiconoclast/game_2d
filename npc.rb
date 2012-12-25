@@ -66,6 +66,10 @@ class ClientNPC < NPC
 
   def draw
     img = @@animation[Gosu::milliseconds / 100 % @@animation.size]
-    img.draw(@body.p.x - img.width / 2.0, @body.p.y - img.height / 2.0, ZOrder::Objects, 1, 1, @color, :add)
+    img.draw_rot(
+      @body.p.x - img.width / 2.0, @body.p.y - img.height / 2.0,
+      ZOrder::Objects,
+      @body.a.radians_to_gosu, 0.5, 0.5,
+      1, 1, @color, :add)
   end
 end
