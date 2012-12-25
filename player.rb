@@ -29,7 +29,7 @@ class Player
 
     # In order to create a shape, we must first define it
     # Chipmunk defines 3 types of Shapes: Segments, Circles and Polys
-    # We'll use s simple, 4 sided Poly for our Player (ship)
+    # We'll use a simple, 4 sided Poly for our Player (ship)
     # You need to define the vectors so that the "top" of the Shape is towards 0 radians (the right)
     shape_array = [
       CP::Vec2.new(-25.0, -25.0),

@@ -10,14 +10,20 @@ class NPC
   def initialize(x, y, x_vel = 0.0, y_vel = 0.0)
     @body = CP::Body.new(0.0001, 0.0001)
     @body.object = self
-    @shape = CP::Shape::Circle.new(body, 25/2, CP::Vec2.new(0.0, 0.0))
-    @shape.collision_type = :npc
-
-    @shape.e = 0.99 # elasticity
-    @shape = shape
     @body.p = CP::Vec2.new(x, y) # position
     @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
     @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
+
+    shape_array = [
+      CP::Vec2.new(-10.5, -10.5),
+      CP::Vec2.new(-10.5, 10.5),
+      CP::Vec2.new(10.5, 10.5),
+      CP::Vec2.new(10.5, -10.5)
+    ]
+    @shape = CP::Shape::Poly.new(@body, shape_array, CP::Vec2.new(0, 0))
+    @shape.collision_type = :npc
+
+    @shape.e = 0.99 # elasticity
   end
 
   def to_s
