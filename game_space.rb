@@ -52,24 +52,27 @@ class GameSpace
 
   def add_bounding_walls
     thickness = 100.0
-    add_bounding_wall( # top
-      width / 2, 0.0 - thickness, width * 1.2, 0.0, thickness)
-    add_bounding_wall( # bottom
-      width / 2, height + thickness, width * 1.2, 0.0, thickness)
     add_bounding_wall( # left
-      0.0 - thickness, height / 2, 0.0, height * 1.2, thickness)
+      0.0 - thickness / 2, height / 2, thickness, height * 1.2)
     add_bounding_wall( # right
-      width + thickness, height / 2, 0.0, height * 1.2, thickness)
+      width + thickness / 2, height / 2, thickness, height * 1.2)
+    add_bounding_wall( # top
+      width / 2, 0.0 - thickness / 2, width * 1.2, thickness)
+    add_bounding_wall( # bottom
+      width / 2, height + thickness / 2, width * 1.2, thickness)
   end
 
-  def add_bounding_wall(x_pos, y_pos, width, height, thickness)
+  def add_bounding_wall(x_pos, y_pos, width, height)
     wall = CP::Body.new_static
     wall.p = CP::Vec2.new(x_pos, y_pos)
     wall.v = CP::Vec2.new(0.0, 0.0)
-    shape = CP::Shape::Segment.new(wall,
+    shape_array = [
       CP::Vec2.new(-0.5 * width, -0.5 * height),
+      CP::Vec2.new(-0.5 * width, 0.5 * height),
       CP::Vec2.new(0.5 * width, 0.5 * height),
-      thickness)
+      CP::Vec2.new(0.5 * width, -0.5 * height),
+    ]
+    shape = CP::Shape::Poly.new(wall, shape_array, CP::Vec2.new(0, 0))
     shape.collision_type = :wall
     shape.e = 0.99 # elasticity (bounce)
     @real_space.add_shape(shape)
