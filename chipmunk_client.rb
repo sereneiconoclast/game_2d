@@ -220,7 +220,7 @@ class GameWindow < Gosu::Window
   end
 
   def create_npc
-    x, y = (mouse_x - @camera_x), (mouse_y - @camera_y)
+    x, y = (mouse_x + @camera_x), (mouse_y + @camera_y)
     if @local[:create_npc][:snap]
       # TODO: Sometimes this can place an object outside the game area.  Fix
       x = (x / 40).round * 40

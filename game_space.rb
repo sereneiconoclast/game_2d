@@ -51,24 +51,27 @@ class GameSpace
   end
 
   def add_bounding_walls
-    add_bounding_wall(width / 2, 0.0, width, 0.0)     # top
-    add_bounding_wall(width / 2, height, width, 0.0)  # bottom
-    add_bounding_wall(0.0, height / 2, 0.0, height)   # left
-    add_bounding_wall(width, height / 2, 0.0, height) # right
+    thickness = 100.0
+    add_bounding_wall( # top
+      width / 2, 0.0 - thickness, width * 1.2, 0.0, thickness)
+    add_bounding_wall( # bottom
+      width / 2, height + thickness, width * 1.2, 0.0, thickness)
+    add_bounding_wall( # left
+      0.0 - thickness, height / 2, 0.0, height * 1.2, thickness)
+    add_bounding_wall( # right
+      width + thickness, height / 2, 0.0, height * 1.2, thickness)
   end
 
-  def add_bounding_wall(x_pos, y_pos, width, height)
+  def add_bounding_wall(x_pos, y_pos, width, height, thickness)
     wall = CP::Body.new_static
     wall.p = CP::Vec2.new(x_pos, y_pos)
     wall.v = CP::Vec2.new(0.0, 0.0)
-    wall.v_limit = 0.0 # max velocity (never move)
     shape = CP::Shape::Segment.new(wall,
       CP::Vec2.new(-0.5 * width, -0.5 * height),
       CP::Vec2.new(0.5 * width, 0.5 * height),
-      1.0) # thickness
+      thickness)
     shape.collision_type = :wall
     shape.e = 0.99 # elasticity (bounce)
-    @real_space.add_body(wall)
     @real_space.add_shape(shape)
   end
 

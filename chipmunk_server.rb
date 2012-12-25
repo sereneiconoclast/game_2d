@@ -16,8 +16,8 @@ require 'game_space'
 require 'player'
 require 'npc'
 
-WORLD_WIDTH = 640
-WORLD_HEIGHT = 480
+WORLD_WIDTH = 1000
+WORLD_HEIGHT = 700
 
 PORT = 4321
 MAX_CLIENTS = 32
