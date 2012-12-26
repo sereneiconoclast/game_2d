@@ -1,7 +1,6 @@
-require 'chipmunk'
+require 'entity'
 require 'gosu'
 require 'zorder'
-require 'registerable'
 
 # The base Player class representing what all Players have in common
 # Moves can be enqueued by calling add_move
@@ -10,116 +9,43 @@ require 'registerable'
 #
 # The server instantiates this class to represent each connected player
 # The connection (conn) is the received one for that player
-class Player
+class Player < Entity
   include Comparable
-  include Registerable
-  attr_reader :conn, :player_name, :body, :shape
+  attr_reader :conn, :player_name
   attr_accessor :score
 
-  def initialize(conn, player_name)
+  def initialize(space, conn, player_name)
+    super(space, 0, 0)
     @conn = conn
     @player_name = player_name
     @score = 0
     @moves = []
     @current_move = nil
-
-    # Create the Body for the Player
-    @body = CP::Body.new(10.0, 150.0)
-    @body.object = self
-
-    # In order to create a shape, we must first define it
-    # Chipmunk defines 3 types of Shapes: Segments, Circles and Polys
-    # We'll use a simple, 4 sided Poly for our Player (ship)
-    # You need to define the vectors so that the "top" of the Shape is towards 0 radians (the right)
-    shape_array = [
-      CP::Vec2.new(-25.0, -25.0),
-      CP::Vec2.new(-25.0, 25.0),
-      CP::Vec2.new(25.0, 1.0),
-      CP::Vec2.new(25.0, -1.0)
-    ]
-    @shape = CP::Shape::Poly.new(@body, shape_array, CP::Vec2.new(0, 0))
-
-    # The collision_type of a shape allows us to set up special collision behavior
-    # based on these types.  The actual value for the collision_type is arbitrary
-    # and, as long as it is consistent, will work for us; of course, it helps to have it make sense
-    @shape.collision_type = :ship
-
-    @shape.e = 0.50 # elasticity
-
-    @body.p = CP::Vec2.new(0.0, 0.0) # position
-    @body.v = CP::Vec2.new(0.0, 0.0) # velocity
-
-    # Keep in mind that down the screen is positive y, which means that PI/2 radians,
-    # which you might consider the top in the traditional Trig unit circle sense is actually
-    # the bottom; thus 3PI/2 is the top
-    @body.a = (3*Math::PI/2.0) # angle in radians; faces towards top of screen
-
-    @body.w_limit = 1.0
   end
 
   # Directly set the position and velocity of our Player
-  def warp(x, y, x_vel=0.0, y_vel=0.0)
-    puts "Warping to #{x}x#{y} going #{x_vel}x#{y_vel}"
-    @body.p = CP::Vec2.new(x, y)
-    @body.v = CP::Vec2.new(x_vel, y_vel)
-    @body.activate
+  def warp(x, y, x_vel=0, y_vel=0)
+    puts "#{player_name} warping to #{x}x#{y} going #{x_vel}x#{y_vel}"
+    self.x, self.y, self.x_vel, self.y_vel = x, y, x_vel, y_vel
+    wake!
   end
 
-  # When a force or torque is set on a Body, it is cumulative
-  # This means that the force you applied last SUBSTEP will compound with the
-  # force applied this SUBSTEP; which is probably not the behavior you want
-  # We reset the forces on the Player each SUBSTEP for this reason
-  def reset_for_next_move
-    @body.reset_forces
-  end
+  def sleep_now?; false; end
 
-  # Apply negative Torque; Chipmunk will do the rest
-  # $SUBSTEPS is used as a divisor to keep turning rate constant
-  # even if the number of steps per update are adjusted
-  #
-  # This needs to be high enough to counteract gravity when the
-  # player is sitting on the floor, or they may get stuck
+  # TODO...
   def turn_left
-    @body.t -= 40000.0/$SUBSTEPS
   end
 
-  # Apply positive Torque; Chipmunk will do the rest
   def turn_right
-    @body.t += 40000.0/$SUBSTEPS
   end
 
-  # Slow rotation by applying a torque in the opposite direction
-  def slow_rotation
-    # Stop spin completely if rotation less than half a degree
-    if @body.w.abs < (Math::PI / 360.0)
-      @body.w = 0.0
-      return
-    end
-
-    amt = 500.0 * @body.w / $SUBSTEPS
-    @body.t -= amt
-  end
-
-  # Apply forward force; Chipmunk will do the rest
-  # $SUBSTEPS is used as a divisor to keep acceleration rate constant
-  # even if the number of steps per update are adjusted
-  # Here we must convert the angle (facing) of the body into
-  # forward momentum by creating a vector in the direction of the facing
-  # and with a magnitude representing the force we want to apply
   def accelerate
-    @body.apply_force((@body.a.radians_to_vec2 * (3000.0/$SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
   end
 
-  # Apply even more forward force
-  # See accelerate for more details
   def boost
-    @body.apply_force((@body.a.radians_to_vec2 * (3000.0)), CP::Vec2.new(0.0, 0.0))
   end
 
-  # Apply reverse force
-  # See accelerate for more details
   def reverse
-    @body.apply_force(-(@body.a.radians_to_vec2 * (1000.0/$SUBSTEPS)), CP::Vec2.new(0.0, 0.0))
   end
 
   def add_move(new_move)
@@ -131,13 +57,9 @@ class Player
   end
 
   def execute_move
-    reset_for_next_move
-    slow_rotation
-
     return unless @current_move
 
-    # puts "#{@player_name} processing a move (#{@moves.size} in queue)"
-    if @current_move.is_a? Hash
+    if @current_move.is_a? Hash # Currently for 'ping' only
       @conn.send_record :pong => @current_move
       return nil
     elsif [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? @current_move
@@ -168,22 +90,22 @@ class Player
       :registry_id => registry_id,
       :player_name => player_name,
       :score => score,
-      :position => [ @body.p.x, @body.p.y ],
-      :velocity => [ @body.v.x, @body.v.y ],
-      :angle => @body.a,
-      :angular_vel => @body.w
+      :position => [ self.x, self.y ],
+      :velocity => [ self.x_vel, self.y_vel ],
+      :moving => self.moving?,
+      :angle => self.a,
+      # TODO :angular_vel => @body.w
     }
   end
 
   def update_from_json(json)
     @player_name = json['player_name']
     @score = json['score']
-    x, y = json['position']
-    x_vel, y_vel = json['velocity']
-    @body.p = CP::Vec2.new(x, y)  # position
-    @body.v = CP::Vec2.new(x_vel, y_vel) # velocity
-    @body.a = json['angle']       # radians
-    @body.w = json['angular_vel'] # radians/second
+    self.x, self.y = json['position']
+    self.x_vel, self.y_vel = json['velocity']
+    self.moving = json['moving']
+    self.a = json['angle']
+    # TODO @body.w = json['angular_vel'] # radians/second
   end
 end
 
@@ -194,14 +116,14 @@ end
 # Instances of this class will not have a connection (conn) because players
 # aren't directly connected to each other
 class ClientPlayer < Player
-  def initialize(conn, player_name, window)
-    super(conn, player_name)
+  def initialize(space, conn, player_name, window)
+    super(space, conn, player_name)
     @window = window
     @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
   end
 
   def draw
-    @image.draw_rot(@body.p.x, @body.p.y, ZOrder::Objects, @body.a.radians_to_gosu)
+    @image.draw_rot(self.pixel_x, self.pixel_y, ZOrder::Objects, self.a)
   end
 end
 
@@ -209,7 +131,7 @@ end
 # This is different in that we check the keyboard, and send moves
 # to the server in addition to dequeueing them
 class LocalPlayer < ClientPlayer
-  def initialize(conn, player_name, window)
+  def initialize(space, conn, player_name, window)
     super
   end
 

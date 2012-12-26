@@ -11,7 +11,6 @@ require 'trollop'
 require 'gosu'
 
 $LOAD_PATH << '.'
-require 'chipmunk_utilities'
 require 'client_connection'
 require 'game_space'
 require 'player'
@@ -19,12 +18,10 @@ require 'npc'
 require 'menu'
 require 'zorder'
 
-SCREEN_WIDTH = 640
-SCREEN_HEIGHT = 480
+SCREEN_WIDTH = 640  # in pixels
+SCREEN_HEIGHT = 480 # in pixels
 
 DEFAULT_PORT = 4321
-
-$SUBSTEPS = 0
 
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
@@ -74,29 +71,10 @@ class GameWindow < Gosu::Window
   end
 
   def establish_world(world)
-    @space = GameSpace.new(world['delta_t'])
+    @space = GameSpace.new.establish_world(world['width'], world['height'])
 
     # No action for fire_object_not_found
     # We may remove an object during a registry update that we were about to doom
-
-    @space.establish_world(world['width'], world['height'])
-
-    # Here we define what is supposed to happen when a Player (ship) collides with an NPC
-    # Also note that both Shapes involved in the collision are passed into the closure
-    # in the same order that their collision_types are defined in the add_collision_func call
-    @space.add_collision_func(:ship, :npc) do |ship_shape, npc_shape|
-      npc = npc_shape.body.object
-      unless @space.doomed? npc # filter out duplicate collisions
-        @beep.play
-        @space.doom npc
-        # remember to return 'true' if we want regular collision handling
-      end
-    end
-
-    # The number of steps to process every Gosu update
-    #
-    # Until this is set, update() does nothing.  So we set this last
-    $SUBSTEPS = world['substeps']
   end
 
   def create_local_player(json)
@@ -106,7 +84,7 @@ class GameWindow < Gosu::Window
   end
 
   def add_player(json, clazz=ClientPlayer, conn=nil)
-    player = clazz.new(conn, json['player_name'], self)
+    player = clazz.new(@space, conn, json['player_name'], self)
     player.registry_id = registry_id = json['registry_id']
     puts "Added player #{player}"
     player.update_from_json(json)
@@ -118,7 +96,7 @@ class GameWindow < Gosu::Window
     raise "We've been kicked!!" if player == @player
     puts "Disconnected: #{player}"
     @space.doom player
-    @space.purge_doomed_objects
+    @space.purge_doomed_entities
   end
 
   def update
@@ -135,7 +113,7 @@ class GameWindow < Gosu::Window
 
     # Handle any pending ENet events
     @conn.update(0) # non-blocking
-    return unless @conn.online?
+    return unless @conn.online? && @space
 
     # Player at the keyboard queues up a command
     @player.handle_input if @player
@@ -143,17 +121,14 @@ class GameWindow < Gosu::Window
     # All players dequeue moves
     @space.dequeue_player_moves
 
-    # Step the physics environment $SUBSTEPS times each update
-    $SUBSTEPS.times do
-      @space.update
-      @conn.update(0)
-    end
+    @space.update
   end
 
   def add_npc(json)
     x, y = json['position']
     x_vel, y_vel = json['velocity']
-    npc = ClientNPC.new(x, y, x_vel, y_vel)
+    angle = json['angle']
+    npc = ClientNPC.new(@space, x, y, angle, x_vel, y_vel)
     npc.registry_id = json['registry_id']
     @space << npc
     # puts "Added #{npc}"
@@ -185,7 +160,7 @@ class GameWindow < Gosu::Window
       (@space.players + @space.npcs).each &:draw
 
       @space.players.each do |player|
-        @font.draw_rel(player.player_name, player.body.p.x, player.body.p.y - 30, ZOrder::Text, 0.5, 0.5, 1.0, 1.0, Gosu::Color::YELLOW)
+        @font.draw_rel(player.player_name, player.pixel_x, player.pixel_y - 30, ZOrder::Text, 0.5, 0.5, 1.0, 1.0, Gosu::Color::YELLOW)
       end
     end
 
@@ -220,12 +195,18 @@ class GameWindow < Gosu::Window
   end
 
   def create_npc
-    x, y = (mouse_x + @camera_x), (mouse_y + @camera_y)
+    # For some reason, Gosu's mouse_x/mouse_y return Floats, so round it off
+    # Also, we want the center of the crosshairs here, not the upper-left
+    mx = mouse_x.round + Entity::CELL_WIDTH_IN_PIXELS / 2
+    my = mouse_y.round + Entity::CELL_WIDTH_IN_PIXELS / 2
+    pixel_x, pixel_y = (mx + @camera_x), (my + @camera_y)
+    x, y = pixel_x * Entity::PIXEL_WIDTH, pixel_y * Entity::PIXEL_WIDTH
+
     if @local[:create_npc][:snap]
-      # TODO: Sometimes this can place an object outside the game area.  Fix
-      x = (x / 40).round * 40
-      y = (y / 40).round * 40
+      x = ((x + Entity::WIDTH / 2) / Entity::WIDTH) * Entity::WIDTH
+      y = ((y + Entity::HEIGHT / 2) / Entity::HEIGHT) * Entity::HEIGHT
     end
+
     @conn.send_create_npc(:x => x, :y => y)
   end
 

@@ -22,11 +22,9 @@ class ServerConnection
       'world' => {
         :width => @game.world_width,
         :height => @game.world_height,
-        :delta_t => @game.delta_t,
-        :substeps => @game.substeps,
       },
       'add_players' => other_players,
-      'add_npcs' => @game.get_all_npcs
+      'add_npcs' => @game.get_all_npcs,
     }
     puts "#{@player} logs in from #{@remote_addr}"
     send_record response, true # answer handshake reliably

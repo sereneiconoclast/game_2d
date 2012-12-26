@@ -1,137 +1,209 @@
-require 'rubygems'
-require 'chipmunk_utilities'
+require 'set'
+require 'wall'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).
 #
-# Maintains a registry of objects.  All game objects must have a registry_id
-# set before they will be accepted.  They must also offer a body and a shape,
-# which will be added.
+# Maintains a registry of entities.  All game entities must have a registry_id
+# set before they will be accepted.
 #
-# Also maintains a list of objects due to be deleted, to avoid removing them
+# Also maintains a list of entities due to be deleted, to avoid removing them
 # at the wrong time (during collision processing).
-
-GRAVITY = 10.0
 
 class GameSpace
   attr_reader :registry, :players, :npcs, :width, :height
 
-  def initialize(delta_t)
-    # Extending CP::Space seems to be a bad thing to do (SEGV).
-    # So let's fake it
-    @real_space = CP::Space.new
-
-    # Time increment over which to apply a physics "step" ("delta t")
-    @dt = delta_t
-
-    @real_space.gravity = CP::Vec2.new(0.0, GRAVITY)
+  def initialize
+    @grid = nil
 
     @registry = {}
 
-    # I create a @doomed array because we cannot remove either Shapes or Bodies
-    # from Space within a collision closure, rather, we have to wait till the closure
-    # is through executing, then we can remove the Shapes and Bodies
-    # In this case, the Shapes and the Bodies they own are removed in the Gosu::Window.update phase
-    # by iterating over the @doomed array
+    # I create a @doomed array so we can remove entities after all collisions
+    # have been processed, to avoid confusion
     @doomed = []
 
     @players = Array.new
     @npcs = Array.new
   end
 
-  def method_missing(sym, *args, &blk)
-    @real_space.send sym, *args, &blk
-  end
-
+  # Width and height, measured in cells
+  # TODO: This may now be safe to fold into initialize()
   def establish_world(width, height)
-    puts "World is #{width}x#{height}"
+    puts "World is #{width}x#{height} cells"
     @width, @height = width, height
 
-    add_bounding_walls
+    # Outer array is X-indexed; inner arrays are Y-indexed
+    # Therefore you can look up @grid[x][y]
+    # However, for convenience, we make the grid two cells wider, two cells
+    # taller.
+    # Then we can populate the edge with Wall instances, and treat (0, 0) as
+    # a usable coordinate.  (-1, -1) contains a Wall
+    # The at() and set_at() methods do the translation, so only they should
+    # access @grid directly
+    @grid = Array.new(width + 2) { Array.new(height + 2) }
+
+    # Top and bottom, including corners
+    (-1 .. width).each do |cell_x|
+      set_at(cell_x, -1, Wall.new(self, cell_x, -1))         # top
+      set_at(cell_x, height, Wall.new(self, cell_x, height)) # bottom
+    end
+
+    # Left and right, skipping corners
+    (0 .. height - 1).each do |cell_y|
+      set_at(-1, cell_y, Wall.new(self, -1, cell_y))       # left
+      set_at(width, cell_y, Wall.new(self, width, cell_y)) # right
+    end
+
+    self
   end
 
-  def add_bounding_walls
-    thickness = 100.0
-    add_bounding_wall( # left
-      0.0 - thickness / 2, height / 2, thickness, height * 1.2)
-    add_bounding_wall( # right
-      width + thickness / 2, height / 2, thickness, height * 1.2)
-    add_bounding_wall( # top
-      width / 2, 0.0 - thickness / 2, width * 1.2, thickness)
-    add_bounding_wall( # bottom
-      width / 2, height + thickness / 2, width * 1.2, thickness)
-  end
+  def pixel_width; @width * Entity::PIXEL_WIDTH; end
+  def pixel_height; @height * Entity::PIXEL_WIDTH; end
 
-  def add_bounding_wall(x_pos, y_pos, width, height)
-    wall = CP::Body.new_static
-    wall.p = CP::Vec2.new(x_pos, y_pos)
-    wall.v = CP::Vec2.new(0.0, 0.0)
-    shape_array = [
-      CP::Vec2.new(-0.5 * width, -0.5 * height),
-      CP::Vec2.new(-0.5 * width, 0.5 * height),
-      CP::Vec2.new(0.5 * width, 0.5 * height),
-      CP::Vec2.new(0.5 * width, -0.5 * height),
-    ]
-    shape = CP::Shape::Poly.new(wall, shape_array, CP::Vec2.new(0, 0))
-    shape.collision_type = :wall
-    shape.e = 0.99 # elasticity (bounce)
-    @real_space.add_shape(shape)
-  end
-
-  # Retrieve object by ID
+  # Retrieve entity by ID
   def [](registry_id)
     @registry[registry_id]
   end
 
-  # List of objects by type
-  def object_list(obj)
-    case obj
+  # We can safely look up cell_x == -1, cell_x == @width, cell_y == -1, and/or
+  # cell_y == @height -- this returns a Wall instance
+  def assert_ok_coords(cell_x, cell_y)
+    raise "Illegal coordinate #{cell_x}x#{cell_y}" if (
+      cell_x < -1 ||
+      cell_y < -1 ||
+      cell_x > @width ||
+      cell_y > @height
+    )
+  end
+
+  # Retrieve single entity by cell coordinates, zero-based
+  def at(cell_x, cell_y)
+    assert_ok_coords(cell_x, cell_y)
+    @grid[cell_x - 1][cell_y - 1]
+  end
+
+  # Low-level setter
+  def set_at(cell_x, cell_y, entity)
+    assert_ok_coords(cell_x, cell_y)
+    @grid[cell_x - 1][cell_y - 1] = entity
+  end
+
+  # Retrieve set of entities by list of coordinates ([cell_x, cell_y] tuples)
+  # This returns a set
+  def contents(coords)
+    coords.collect {|cell_x, cell_y| at(cell_x, cell_y) }.compact.to_set
+  end
+
+  # Retrieve set of entities that overlap with a theoretical entity created at
+  # position [x, y] (in subpixels)
+  def contents_overlapping(x, y)
+    contents([
+      [Entity.left_cell_x_at(x), Entity.top_cell_y_at(y)],
+      [Entity.right_cell_x_at(x), Entity.top_cell_y_at(y)],
+      [Entity.left_cell_x_at(x), Entity.bottom_cell_y_at(y)],
+      [Entity.right_cell_x_at(x), Entity.bottom_cell_y_at(y)],
+    ])
+  end
+
+  # Update grid after an entity moves
+  # cells_before and cells_after are both lists of coords ([cell_x, cell_y]
+  # tuples)
+  # all of cells_before must currently contain 'entity'
+  # all of cells_after must currently be empty
+  def update_grid(entity, cells_before, cells_after)
+    (cells_before - cells_after).each do |cell_x, cell_y|
+      before = at(cell_x, cell_y)
+      raise "Cell #{cell_x}x#{cell_y} contains #{before}, not #{entity}" unless before == entity
+      set_at(cell_x, cell_y, nil)
+    end
+    (cells_after - cells_before).each do |cell_x, cell_y|
+      before = at(cell_x, cell_y)
+      raise "Cell #{cell_x}x#{cell_y} contains #{before}, not empty" if before
+      set_at(cell_x, cell_y, entity)
+    end
+  end
+
+  # Execute a block during which an entity may move
+  # If it did, we will update the grid appropriately, and wake nearby entities
+  #
+  # All entity motion should be passed through this method
+  def process_moving_entity(entity)
+    before_x, before_y = entity.x, entity.y
+    before_cells = entity.occupied_cells
+    nearby_x_before = entity.nearby_x_range
+    nearby_y_before = entity.nearby_y_range
+
+    yield
+
+    if moved = (entity.x != before_x || entity.y != before_y)
+      update_grid(entity, before_cells, entity.occupied_cells)
+      # TODO - this only works if the entity slides from one cell into an
+      # adjoining one.  If it actually teleports, it wakes far more cells than
+      # necessary...
+      wake_area(
+        nearby_x_before + entity.nearby_x_range,
+        nearby_y_before + entity.nearby_y_range
+      )
+    end
+
+    moved
+  end
+
+  # List of entities by type matching the specified entity
+  def entity_list(entity)
+    case entity
     when Player then @players
     when NPC then @npcs
-    else raise "Unknown object type: #{obj} (#{obj.class})"
+    else raise "Unknown entity type: #{entity} (#{entity.class})"
     end
   end
 
-  # Override to be informed when trying to add an object that
+  # Override to be informed when trying to add an entity that
   # we already have (registry ID clash)
-  def fire_duplicate_id(old_object, new_object); end
+  def fire_duplicate_id(old_entity, new_entity); end
 
-  # Add an object
-  def <<(obj)
-    reg_id = obj.registry_id
+  # Add an entity
+  def <<(entity)
+    reg_id = entity.registry_id
     if old = self[reg_id]
-      fire_duplicate_id(old, obj)
+      fire_duplicate_id(old, entity)
       old
     else
-      @registry[reg_id] = obj
-      object_list(obj) << obj
-      @real_space.add_body(obj.body)
-      @real_space.add_shape(obj.shape)
-      obj
+      @registry[reg_id] = entity
+      entity_list(entity) << entity
+      update_grid(entity, [], entity.occupied_cells)
+      entity
     end
   end
 
-  # Doom an object (mark it to be deleted but don't remove it yet)
-  def doom(obj); @doomed << obj; end
+  # Doom an entity (mark it to be deleted but don't remove it yet)
+  def doom(entity); @doomed << entity; end
 
-  def doomed?(obj); @doomed.include?(obj); end
+  def doomed?(entity); @doomed.include?(entity); end
 
-  # Override to be informed when trying to purge an object that
+  # Override to be informed when trying to purge an entity that
   # turns out not to exist
-  def fire_object_not_found(object); end
+  def fire_entity_not_found(entity); end
 
-  def purge_doomed_objects
-    @doomed.each do |object|
-      if @registry.delete object.registry_id
-        object_list(object).delete object
-
-        @real_space.remove_body(object.body)
-        @real_space.remove_shape(object.shape)
+  def purge_doomed_entities
+    @doomed.each do |entity|
+      if @registry.delete entity.registry_id
+        entity.wake_surroundings
+        update_grid(entity, entity.occupied_cells, [])
+        entity_list(entity).delete entity
       else
-        fire_object_not_found(object)
+        fire_entity_not_found(entity)
       end
     end
     @doomed.clear
+  end
+
+  def wake_area(x_range, y_range)
+    x_range.each do |cell_x|
+      y_range.each do |cell_y|
+        at(cell_x, cell_y).wake!
+      end
+    end
   end
 
   def dequeue_player_moves
@@ -139,14 +211,12 @@ class GameSpace
   end
 
   def update
-    purge_doomed_objects
+    purge_doomed_entities
 
     # Process commands by all players
     @players.each &:execute_move
 
-    # Perform the step over @dt period of time
-    # For best performance @dt should remain consistent for the game
-    @real_space.step(@dt)
+    @registry.values.find_all(&:moving?).each(&:update)
   end
 
   # Assertion.  Used server-side only
@@ -154,28 +224,28 @@ class GameSpace
     expected = @players.size + @npcs.size
     actual = @registry.size
     if expected != actual
-      raise "We have #{expected} game objects, #{actual} in registry (delta: #{actual - expected})"
+      raise "We have #{expected} game entities, #{actual} in registry (delta: #{actual - expected})"
     end
   end
 
   # Used client-side only.  Determine an appropriate camera position,
-  # given the specified window size, and preferring that the specified object
+  # given the specified window size, and preferring that the specified entity
   # be in the center
-  def good_camera_position_for(obj, screen_width, screen_height)
-    # Given plenty of room, put the object in the middle of the screen
+  def good_camera_position_for(entity, screen_width, screen_height)
+    # Given plenty of room, put the entity in the middle of the screen
     # If doing so would expose the area outside the world, move the camera just enough
     # to avoid that
     # If the world is smaller than the window, center it
 
-    camera_x = if screen_width > @width
-      (@width - screen_width) / 2 # negative
+    camera_x = if screen_width > pixel_width
+      (pixel_width - screen_width) / 2 # negative
     else
-      [[obj.body.p.x - screen_width/2, @width - screen_width].min, 0].max
+      [[entity.pixel_x - screen_width/2, pixel_width - screen_width].min, 0].max
     end
-    camera_y = if screen_height > @height
-      (@height - screen_height) / 2 # negative
+    camera_y = if screen_height > pixel_height
+      (pixel_height - screen_height) / 2 # negative
     else
-      [[obj.body.p.y - screen_height/2, @height - screen_height].min, 0].max
+      [[entity.pixel_y - screen_height/2, pixel_height - screen_height].min, 0].max
     end
 
     [ camera_x, camera_y ]
