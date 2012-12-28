@@ -11,10 +11,11 @@ require 'wall'
 # at the wrong time (during collision processing).
 
 class GameSpace
-  attr_reader :registry, :players, :npcs, :width, :height
+  attr_reader :registry, :players, :npcs, :cell_width, :cell_height
+  attr_accessor :storage
 
   def initialize
-    @grid = nil
+    @grid = @storage = nil
 
     @registry = {}
 
@@ -28,51 +29,75 @@ class GameSpace
 
   # Width and height, measured in cells
   # TODO: This may now be safe to fold into initialize()
-  def establish_world(width, height)
-    puts "World is #{width}x#{height} cells"
-    @width, @height = width, height
+  def establish_world(cell_width, cell_height)
+    puts "World is #{cell_width}x#{cell_height} cells"
+    @cell_width, @cell_height = cell_width, cell_height
 
     # Outer array is X-indexed; inner arrays are Y-indexed
-    # Therefore you can look up @grid[x][y]
+    # Therefore you can look up @grid[cell_x][cell_y] ...
     # However, for convenience, we make the grid two cells wider, two cells
-    # taller.
-    # Then we can populate the edge with Wall instances, and treat (0, 0) as
-    # a usable coordinate.  (-1, -1) contains a Wall
+    # taller.  Then we can populate the edge with Wall instances, and treat (0,
+    # 0) as a usable coordinate.  (-1, -1) contains a Wall, for example
     # The at() and set_at() methods do the translation, so only they should
     # access @grid directly
-    @grid = Array.new(width + 2) { Array.new(height + 2) }
+    @grid = Array.new(cell_width + 2) { Array.new(cell_height + 2) }
 
     # Top and bottom, including corners
-    (-1 .. width).each do |cell_x|
-      set_at(cell_x, -1, Wall.new(self, cell_x, -1))         # top
-      set_at(cell_x, height, Wall.new(self, cell_x, height)) # bottom
+    (-1 .. cell_width).each do |cell_x|
+      set_at(cell_x, -1, Wall.new(self, cell_x, -1))                   # top
+      set_at(cell_x, cell_height, Wall.new(self, cell_x, cell_height)) # bottom
     end
 
     # Left and right, skipping corners
-    (0 .. height - 1).each do |cell_y|
-      set_at(-1, cell_y, Wall.new(self, -1, cell_y))       # left
-      set_at(width, cell_y, Wall.new(self, width, cell_y)) # right
+    (0 .. cell_height - 1).each do |cell_y|
+      set_at(-1, cell_y, Wall.new(self, -1, cell_y))                 # left
+      set_at(cell_width, cell_y, Wall.new(self, cell_width, cell_y)) # right
     end
 
     self
   end
 
-  def pixel_width; @width * Entity::PIXEL_WIDTH; end
-  def pixel_height; @height * Entity::PIXEL_WIDTH; end
+  def self.load(storage)
+    cell_width, cell_height = storage['cell_width'], storage['cell_height']
+    space = GameSpace.new.establish_world(cell_width, cell_height)
+    space.storage = storage
+    space.load
+  end
+
+  def save
+    @storage['cell_width'], @storage['cell_height'] = @cell_width, @cell_height
+    @storage['npcs'] = @npcs
+    @storage.save
+  end
+
+  # TODO: Handle this while server is running and players are connected
+  # TODO: Handle resizing the space
+  def load
+    @storage['npcs'].each do |json|
+      puts "Loading #{json.inspect}"
+      self << Entity.from_json(self, json)
+    end
+    self
+  end
+
+  def pixel_width; @cell_width * Entity::CELL_WIDTH_IN_PIXELS; end
+  def pixel_height; @cell_height * Entity::CELL_WIDTH_IN_PIXELS; end
+  def width; @cell_width * Entity::WIDTH; end
+  def height; @cell_height * Entity::HEIGHT; end
 
   # Retrieve entity by ID
   def [](registry_id)
     @registry[registry_id]
   end
 
-  # We can safely look up cell_x == -1, cell_x == @width, cell_y == -1, and/or
-  # cell_y == @height -- this returns a Wall instance
+  # We can safely look up cell_x == -1, cell_x == @cell_width, cell_y == -1,
+  # and/or cell_y == @cell_height -- any of these returns a Wall instance
   def assert_ok_coords(cell_x, cell_y)
     raise "Illegal coordinate #{cell_x}x#{cell_y}" if (
       cell_x < -1 ||
       cell_y < -1 ||
-      cell_x > @width ||
-      cell_y > @height
+      cell_x > @cell_width ||
+      cell_y > @cell_height
     )
   end
 
@@ -128,6 +153,12 @@ class GameSpace
   #
   # All entity motion should be passed through this method
   def process_moving_entity(entity)
+    unless @registry[entity.registry_id]
+      puts "#{entity} not in registry yet, no move to process"
+      yield
+      return
+    end
+
     before_x, before_y = entity.x, entity.y
     before_cells = entity.occupied_cells
     nearby_x_before = entity.nearby_x_range
@@ -230,13 +261,14 @@ class GameSpace
 
   # Used client-side only.  Determine an appropriate camera position,
   # given the specified window size, and preferring that the specified entity
-  # be in the center
+  # be in the center.  Inputs and outputs are in pixels
   def good_camera_position_for(entity, screen_width, screen_height)
     # Given plenty of room, put the entity in the middle of the screen
     # If doing so would expose the area outside the world, move the camera just enough
     # to avoid that
     # If the world is smaller than the window, center it
 
+#   puts "Screen in pixels is #{screen_width}x#{screen_height}; world in pixels is #{pixel_width}x#{pixel_height}"
     camera_x = if screen_width > pixel_width
       (pixel_width - screen_width) / 2 # negative
     else
@@ -248,6 +280,7 @@ class GameSpace
       [[entity.pixel_y - screen_height/2, pixel_height - screen_height].min, 0].max
     end
 
+#   puts "Camera at #{camera_x}x#{camera_y}"
     [ camera_x, camera_y ]
   end
 end

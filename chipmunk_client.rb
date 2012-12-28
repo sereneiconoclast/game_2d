@@ -1,10 +1,5 @@
-## File: ChipmunkIntegration.rb
-## Author: Dirk Johnson
-## Version: 1.0.0
-## Date: 2007-10-05
+## Author: Greg Meyers
 ## License: Same as for Gosu (MIT)
-## Comments: Based on the Gosu Ruby Tutorial, but incorporating the Chipmunk Physics Engine
-## See https://github.com/jlnr/gosu/wiki/Ruby-Chipmunk-Integration for the accompanying text.
 
 require 'rubygems'
 require 'trollop'
@@ -54,6 +49,9 @@ class GameWindow < Gosu::Window
     submenu = Menu.new('Main menu', self, @font,
       MenuItem.new(snap_text, self, @font) do |item|
         @local[:create_npc][:snap] = !@local[:create_npc][:snap]
+      end,
+      MenuItem.new('Save!', self, @font) do |item|
+        @conn.send_save
       end
     )
     main_menu = Menu.new('Main menu', self, @font,
@@ -71,7 +69,8 @@ class GameWindow < Gosu::Window
   end
 
   def establish_world(world)
-    @space = GameSpace.new.establish_world(world['width'], world['height'])
+    @space = GameSpace.new.establish_world(
+      world['cell_width'], world['cell_height'])
 
     # No action for fire_object_not_found
     # We may remove an object during a registry update that we were about to doom
@@ -124,6 +123,7 @@ class GameWindow < Gosu::Window
     @space.update
   end
 
+  # TODO: Sync with Entity.from_json
   def add_npc(json)
     x, y = json['position']
     x_vel, y_vel = json['velocity']
@@ -196,15 +196,23 @@ class GameWindow < Gosu::Window
 
   def create_npc
     # For some reason, Gosu's mouse_x/mouse_y return Floats, so round it off
-    # Also, we want the center of the crosshairs here, not the upper-left
-    mx = mouse_x.round + Entity::CELL_WIDTH_IN_PIXELS / 2
-    my = mouse_y.round + Entity::CELL_WIDTH_IN_PIXELS / 2
+    mx, my = mouse_x.round, mouse_y.round
     pixel_x, pixel_y = (mx + @camera_x), (my + @camera_y)
+#   puts "Mouse click on pixel #{mx}x#{my}, camera-adjusted to #{pixel_x}x#{pixel_y}"
     x, y = pixel_x * Entity::PIXEL_WIDTH, pixel_y * Entity::PIXEL_WIDTH
+#   puts "Raw X/Y position of click is #{x}x#{y}"
 
     if @local[:create_npc][:snap]
-      x = ((x + Entity::WIDTH / 2) / Entity::WIDTH) * Entity::WIDTH
-      y = ((y + Entity::HEIGHT / 2) / Entity::HEIGHT) * Entity::HEIGHT
+      # When snap is on, we want the upper-left corner of the cell we clicked in
+      x = (x / Entity::WIDTH) * Entity::WIDTH
+      y = (y / Entity::HEIGHT) * Entity::HEIGHT
+#     puts "Snapped X/Y position is #{x}x#{y}"
+    else
+      # When snap is off, we want the click to be the new entity's center, not
+      # its upper-left corner
+      x -= Entity::WIDTH / 2
+      y -= Entity::HEIGHT / 2
+#     puts "Adjusted un-snapped X/Y position is #{x}x#{y}"
     end
 
     @conn.send_create_npc(:x => x, :y => y)

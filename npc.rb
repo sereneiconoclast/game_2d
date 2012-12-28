@@ -27,31 +27,11 @@ class NPC < Entity
   end
 
   def to_s
-    "NPC (#{registry_id}) at #{x}x#{y}"
-  end
-
-  def to_json(*args)
-    as_json.to_json(*args)
+    "NPC (#{registry_id_safe}) at #{x}x#{y}"
   end
 
   def as_json
-    {
-      :class => 'NPC',
-      :registry_id => registry_id,
-      :position => [ self.x, self.y ],
-      :velocity => [ self.x_vel, self.y_vel ],
-      :angle => self.a,
-      :moving => self.moving?,
-    }
-  end
-
-  def update_from_json(json)
-    new_x, new_y = json['position']
-    new_x_vel, new_y_vel = json['velocity']
-    new_angle = json['angle']
-    new_moving = json['moving']
-
-    warp(new_x, new_y, new_x_vel, new_y_vel, new_angle, new_moving)
+    super().merge( :class => 'NPC' )
   end
 end
 
@@ -70,10 +50,16 @@ class ClientNPC < NPC
 
   def draw
     img = @@animation[Gosu::milliseconds / 100 % @@animation.size]
+    # Entity's pixel_x/pixel_y is the location of the upper-left corner
+    # draw_rot wants us to specify the point around which rotation occurs
+    # That should be the center
     img.draw_rot(
-      self.pixel_x - img.width / 2.0, self.pixel_y - img.height / 2.0,
-      ZOrder::Objects,
-      self.a, 0.5, 0.5,
-      1, 1, @color, :add)
+      self.pixel_x + Entity::CELL_WIDTH_IN_PIXELS / 2,
+      self.pixel_y + Entity::CELL_WIDTH_IN_PIXELS / 2,
+      ZOrder::Objects, self.a,
+      0.5, 0.5, # rotate around the center
+      1, 1, # scaling factor
+      @color, # modify color
+      :add) # draw additively
   end
 end

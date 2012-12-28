@@ -176,4 +176,38 @@ class Entity
     # TODO
     puts "#{self} impacted by #{other}"
   end
+
+  def to_json(*args)
+    as_json.to_json(*args)
+  end
+
+  def as_json
+    {
+      :class => self.class.to_s,
+      :registry_id => registry_id,
+      :position => [ self.x, self.y ],
+      :velocity => [ self.x_vel, self.y_vel ],
+      :angle => self.a,
+      :moving => self.moving?,
+    }
+  end
+
+  def update_from_json(json)
+    new_x, new_y = json['position']
+    new_x_vel, new_y_vel = json['velocity']
+    new_angle = json['angle']
+    new_moving = json['moving']
+
+    warp(new_x, new_y, new_x_vel, new_y_vel, new_angle, new_moving)
+  end
+
+  def self.from_json(space, json)
+    clazz = self.class.const_get(json['class'], true)
+    # TODO: This will only work for NPC, until we get the constructors
+    # for NPC/Player in sync
+    entity = clazz.new(space, 0, 0)
+    entity.registry_id = json['registry_id']
+    entity.update_from_json(json)
+    entity
+  end
 end

@@ -74,6 +74,10 @@ class ClientConnection < ENet::Connection
     send_record(:create_npc => npc)
   end
 
+  def send_save
+    send_record :save => true
+  end
+
   def send_ping
     send_record :ping => { :start => Time.now.to_f }
   end

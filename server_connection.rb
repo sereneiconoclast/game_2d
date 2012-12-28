@@ -20,8 +20,8 @@ class ServerConnection
     response = {
       'you_are' => @player,
       'world' => {
-        :width => @game.world_width,
-        :height => @game.world_height,
+        :cell_width => @game.world_cell_width,
+        :cell_height => @game.world_cell_height,
       },
       'add_players' => other_players,
       'add_npcs' => @game.get_all_npcs,
@@ -59,6 +59,8 @@ class ServerConnection
       @player.add_move move.to_sym
     elsif (npc = hash['create_npc'])
       @game.create_npc npc
+    elsif (hash['save'])
+      @game.save
     elsif (ping = hash['ping'])
       @player.add_move ping
     else

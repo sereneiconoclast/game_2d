@@ -1,15 +1,12 @@
-## File: ChipmunkIntegration.rb
-## Author: Dirk Johnson
-## Version: 1.0.0
-## Date: 2007-10-05
+## Author: Greg Meyers
 ## License: Same as for Gosu (MIT)
-## Comments: Based on the Gosu Ruby Tutorial, but incorporating the Chipmunk Physics Engine
-## See https://github.com/jlnr/gosu/wiki/Ruby-Chipmunk-Integration for the accompanying text.
 
 require 'rubygems'
+require 'trollop'
 require 'gosu'
 
 $LOAD_PATH << '.'
+require 'storage'
 require 'server_port'
 require 'game_space'
 require 'player'
@@ -18,15 +15,24 @@ require 'npc'
 WORLD_WIDTH = 100 # in cells
 WORLD_HEIGHT = 70 # in cells
 
-PORT = 4321
+DEFAULT_PORT = 4321
+DEFAULT_STORAGE = '.cnstruxn'
 MAX_CLIENTS = 32
 
 # How many cycles between broadcasts of the registry
 REGISTRY_BROADCAST_EVERY=60 / 4 # Four times a second
 
 class Game
-  def initialize
-    @space = GameSpace.new.establish_world(world_width, world_height)
+  def initialize(storage, level, cell_width, cell_height)
+    @storage = Storage.in_home_dir(storage).dir('server')
+    level_storage = @storage[level]
+
+    if level_storage.empty?
+      @space = GameSpace.new.establish_world(cell_width, cell_height)
+      @space.storage = level_storage
+    else
+      @space = GameSpace.load(level_storage)
+    end
 
     # This should never happen.  It can only happen client-side because a
     # registry update may create an entity before we get around to it in,
@@ -43,13 +49,17 @@ class Game
     end
   end
 
-  def world_width; WORLD_WIDTH; end
-  def world_height; WORLD_HEIGHT; end
+  def world_cell_width; @space.cell_width; end
+  def world_cell_height; @space.cell_height; end
+
+  def save
+    @space.save
+  end
 
   def add_player(conn, player_name)
     player = Player.new(@space, conn, player_name)
     player.generate_id
-    player.warp(world_width / 2, world_height / 2) # coords in cells
+    player.x, player.y = @space.width / 2, @space.height / 2
     @space.players.each {|p| p.conn.add_player(player) }
     @space << player
   end
@@ -67,6 +77,7 @@ class Game
     if conflicts.empty?
       npc = NPC.new(@space, x, y)
       npc.generate_id
+#     npc.a = rand(360)
       puts "Created #{npc}"
       @space << npc
       @space.players.each {|p| p.conn.add_npc npc }
@@ -110,9 +121,18 @@ class Game
 
 end
 
-game = Game.new
+opts = Trollop::options do
+  opt :level, "Level name", :type => :string, :required => true
+  opt :width, "Level width", :default => WORLD_WIDTH
+  opt :height, "Level height", :default => WORLD_HEIGHT
+  opt :port, "Port number", :default => DEFAULT_PORT
+  opt :storage, "Data storage dir (in home directory)", :default => DEFAULT_STORAGE
+  opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
+end
 
-server_port = ServerPort.new(game, PORT, MAX_CLIENTS)
+game = Game.new(opts[:storage], opts[:level], opts[:width], opts[:height])
 
-puts "ENet server listening on #{PORT}"
+server_port = ServerPort.new(game, opts[:port], opts[:max_clients])
+
+puts "ENet server listening on #{opts[:port]}"
 game.run(server_port)

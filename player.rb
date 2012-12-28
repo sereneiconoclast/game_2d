@@ -23,13 +23,6 @@ class Player < Entity
     @current_move = nil
   end
 
-  # Directly set the position and velocity of our Player
-  def warp(x, y, x_vel=0, y_vel=0)
-    puts "#{player_name} warping to #{x}x#{y} going #{x_vel}x#{y_vel}"
-    self.x, self.y, self.x_vel, self.y_vel = x, y, x_vel, y_vel
-    wake!
-  end
-
   def sleep_now?; false; end
 
   # TODO...
@@ -79,23 +72,12 @@ class Player < Entity
     "#{player_name} (#{registry_id})"
   end
 
-  def to_json(*args)
-    as_json.to_json(*args)
-  end
-
   def as_json
-    {
-      #JSON.create_id => self.class.name,
+    super().merge(
       :class => 'Player',
-      :registry_id => registry_id,
       :player_name => player_name,
-      :score => score,
-      :position => [ self.x, self.y ],
-      :velocity => [ self.x_vel, self.y_vel ],
-      :moving => self.moving?,
-      :angle => self.a,
-      # TODO :angular_vel => @body.w
-    }
+      :score => score
+    )
   end
 
   def update_from_json(json)

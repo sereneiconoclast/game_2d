@@ -5,6 +5,11 @@ module Registerable
     @registry_id or raise("No ID set for #{self}")
   end
 
+  # For use in to_s
+  def registry_id_safe
+    @registry_id || '[NO ID]'
+  end
+
   def generate_id
     raise "#{self}: Already have ID #{@registry_id}, cannot set to #{id}" if @registry_id
     @registry_id = SecureRandom.uuid
