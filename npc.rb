@@ -8,14 +8,12 @@ class NPC < Entity
   end
 
   def empty_underneath?
-    beneath = space.contents([
-      [left_cell_x, bottom_cell_y(self.y + 1)],
-      [right_cell_x, bottom_cell_y(self.y + 1)],
-    ]).delete(self)
-    beneath.empty?
+    beneath = space.entities_at_points([
+      [x, y + Entity::HEIGHT], [x + Entity::WIDTH - 1, y + Entity::HEIGHT]
+    ]).empty?
   end
 
-  # Primitive gravity: Accelerate downward if all cells beneath are empty
+  # Primitive gravity: Accelerate downward if there are no entities underneath
   def update
     accelerate(0, 1) if empty_underneath?
     super

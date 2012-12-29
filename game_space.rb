@@ -37,21 +37,21 @@ class GameSpace
     # Therefore you can look up @grid[cell_x][cell_y] ...
     # However, for convenience, we make the grid two cells wider, two cells
     # taller.  Then we can populate the edge with Wall instances, and treat (0,
-    # 0) as a usable coordinate.  (-1, -1) contains a Wall, for example
-    # The at() and set_at() methods do the translation, so only they should
+    # 0) as a usable coordinate.  (-1, -1) contains a Wall, for example.  The
+    # at(), put(), and cut() methods do the translation, so only they should
     # access @grid directly
-    @grid = Array.new(cell_width + 2) { Array.new(cell_height + 2) }
+    @grid = Array.new(cell_width + 2) { Array.new(cell_height + 2) { Set.new } }
 
     # Top and bottom, including corners
     (-1 .. cell_width).each do |cell_x|
-      set_at(cell_x, -1, Wall.new(self, cell_x, -1))                   # top
-      set_at(cell_x, cell_height, Wall.new(self, cell_x, cell_height)) # bottom
+      put(cell_x, -1, Wall.new(self, cell_x, -1))                   # top
+      put(cell_x, cell_height, Wall.new(self, cell_x, cell_height)) # bottom
     end
 
     # Left and right, skipping corners
     (0 .. cell_height - 1).each do |cell_y|
-      set_at(-1, cell_y, Wall.new(self, -1, cell_y))                 # left
-      set_at(cell_width, cell_y, Wall.new(self, cell_width, cell_y)) # right
+      put(-1, cell_y, Wall.new(self, -1, cell_y))                 # left
+      put(cell_width, cell_y, Wall.new(self, cell_width, cell_y)) # right
     end
 
     self
@@ -101,51 +101,110 @@ class GameSpace
     )
   end
 
-  # Retrieve single entity by cell coordinates, zero-based
+  # Retrieve set of entities falling (partly) within cell coordinates,
+  # zero-based
   def at(cell_x, cell_y)
     assert_ok_coords(cell_x, cell_y)
     @grid[cell_x - 1][cell_y - 1]
   end
 
-  # Low-level setter
-  def set_at(cell_x, cell_y, entity)
+  # Low-level adder
+  def put(cell_x, cell_y, entity)
     assert_ok_coords(cell_x, cell_y)
-    @grid[cell_x - 1][cell_y - 1] = entity
+    @grid[cell_x - 1][cell_y - 1] << entity
   end
 
-  # Retrieve set of entities by list of coordinates ([cell_x, cell_y] tuples)
-  # This returns a set
-  def contents(coords)
-    coords.collect {|cell_x, cell_y| at(cell_x, cell_y) }.compact.to_set
+  # Low-level remover
+  def cut(cell_x, cell_y, entity)
+    assert_ok_coords(cell_x, cell_y)
+    @grid[cell_x - 1][cell_y - 1].delete entity
+  end
+
+  # Translate a subpixel point (X, Y) to a cell coordinate (cell_x, cell_y)
+  def cell_at_point(x, y)
+    [x / Entity::WIDTH, y / Entity::HEIGHT ]
+  end
+
+  # Translate multiple subpixel points (X, Y) to a set of cell coordinates
+  # (cell_x, cell_y)
+  def cells_at_points(coords)
+    coords.collect {|x, y| cell_at_point(x, y) }.to_set
+  end
+
+  # Given the (X, Y) position of a theoretical entity, return the list of all
+  # the coordinates of its corners
+  def corner_points_of_entity(x, y)
+    [
+      [x, y],
+      [x + Entity::WIDTH - 1, y],
+      [x, y + Entity::HEIGHT - 1],
+      [x + Entity::WIDTH - 1, y + Entity::HEIGHT - 1],
+    ]
+  end
+
+  # Return the entity (if any) at a subpixel point (X, Y)
+  def entity_at_point(x, y)
+    all = at(*cell_at_point(x, y)).find_all do |e|
+      e.x <= x && e.x > (x - Entity::WIDTH) &&
+      e.y <= y && e.y > (y - Entity::HEIGHT)
+    end
+    raise "More than one entity at #{x}x#{y}: #{all.inspect}" if all.size > 1
+    all.first
+  end
+
+  # Accepts a collection of (x, y)
+  def entities_at_points(coords)
+    coords.collect {|x, y| entity_at_point(x, y) }.compact.to_set
+  end
+
+  # The set of entities that may be affected by an entity moving to (or from)
+  # the specified (x, y) coordinates
+  # This includes the coordinates of eight points just beyond the entity's
+  # borders
+  def entities_bordering_entity_at(x, y)
+    r = x + Entity::WIDTH - 1
+    b = y + Entity::HEIGHT - 1
+    entities_at_points([
+      [x - 1, y], [x, y - 1], # upper-left corner
+      [r + 1, y], [r, y - 1], # upper-right corner
+      [x - 1, b], [x, b + 1], # lower-left corner
+      [r + 1, b], [r, b + 1], # lower-right corner
+    ])
   end
 
   # Retrieve set of entities that overlap with a theoretical entity created at
   # position [x, y] (in subpixels)
-  def contents_overlapping(x, y)
-    contents([
-      [Entity.left_cell_x_at(x), Entity.top_cell_y_at(y)],
-      [Entity.right_cell_x_at(x), Entity.top_cell_y_at(y)],
-      [Entity.left_cell_x_at(x), Entity.bottom_cell_y_at(y)],
-      [Entity.right_cell_x_at(x), Entity.bottom_cell_y_at(y)],
-    ])
+  def entities_overlapping(x, y)
+    entities_at_points(corner_points_of_entity(x, y))
+  end
+
+  # Retrieve list of cells (sets) that overlap with a theoretical entity
+  # at position [x, y] (in subpixels).
+  def cells_overlapping(x, y)
+    cells_at_points(corner_points_of_entity(x, y)).collect {|cx, cy| at(cx, cy) }
+  end
+
+  # Add the entity to the grid
+  def add_entity_to_grid(entity)
+    cells_overlapping(entity.x, entity.y).each {|s| s << entity }
+  end
+
+  # Remove the entity from the grid
+  def remove_entity_from_grid(entity)
+    cells_overlapping(entity.x, entity.y).each do |s|
+      raise "#{entity} not where expected" unless s.delete? entity
+    end
   end
 
   # Update grid after an entity moves
-  # cells_before and cells_after are both lists of coords ([cell_x, cell_y]
-  # tuples)
-  # all of cells_before must currently contain 'entity'
-  # all of cells_after must currently be empty
-  def update_grid(entity, cells_before, cells_after)
-    (cells_before - cells_after).each do |cell_x, cell_y|
-      before = at(cell_x, cell_y)
-      raise "Cell #{cell_x}x#{cell_y} contains #{before}, not #{entity}" unless before == entity
-      set_at(cell_x, cell_y, nil)
+  def update_grid_for_moved_entity(entity, old_x, old_y)
+    cells_before = cells_overlapping(old_x, old_y)
+    cells_after = cells_overlapping(entity.x, entity.y)
+
+    (cells_before - cells_after).each do |s|
+      raise "#{entity} not where expected" unless s.delete? entity
     end
-    (cells_after - cells_before).each do |cell_x, cell_y|
-      before = at(cell_x, cell_y)
-      raise "Cell #{cell_x}x#{cell_y} contains #{before}, not empty" if before
-      set_at(cell_x, cell_y, entity)
-    end
+    (cells_after - cells_before).each {|s| s << entity }
   end
 
   # Execute a block during which an entity may move
@@ -160,21 +219,17 @@ class GameSpace
     end
 
     before_x, before_y = entity.x, entity.y
-    before_cells = entity.occupied_cells
-    nearby_x_before = entity.nearby_x_range
-    nearby_y_before = entity.nearby_y_range
 
     yield
 
     if moved = (entity.x != before_x || entity.y != before_y)
-      update_grid(entity, before_cells, entity.occupied_cells)
-      # TODO - this only works if the entity slides from one cell into an
-      # adjoining one.  If it actually teleports, it wakes far more cells than
-      # necessary...
-      wake_area(
-        nearby_x_before + entity.nearby_x_range,
-        nearby_y_before + entity.nearby_y_range
-      )
+      update_grid_for_moved_entity(entity, before_x, before_y)
+      # Note: Maybe we should only wake entities in either set
+      # and not both.  For now we'll wake them all
+      (
+        entities_bordering_entity_at(before_x, before_y) +
+        entities_bordering_entity_at(entity.x, entity.y)
+      ).each(&:wake!)
     end
 
     moved
@@ -193,7 +248,7 @@ class GameSpace
   # we already have (registry ID clash)
   def fire_duplicate_id(old_entity, new_entity); end
 
-  # Add an entity
+  # Add an entity.  Will wake neighboring entities
   def <<(entity)
     reg_id = entity.registry_id
     if old = self[reg_id]
@@ -202,7 +257,8 @@ class GameSpace
     else
       @registry[reg_id] = entity
       entity_list(entity) << entity
-      update_grid(entity, [], entity.occupied_cells)
+      add_entity_to_grid(entity)
+      entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
       entity
     end
   end
@@ -216,25 +272,18 @@ class GameSpace
   # turns out not to exist
   def fire_entity_not_found(entity); end
 
+  # Actually remove all previously-marked entities.  Wakes neighbors
   def purge_doomed_entities
     @doomed.each do |entity|
       if @registry.delete entity.registry_id
-        entity.wake_surroundings
-        update_grid(entity, entity.occupied_cells, [])
+        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
+        remove_entity_from_grid(entity)
         entity_list(entity).delete entity
       else
         fire_entity_not_found(entity)
       end
     end
     @doomed.clear
-  end
-
-  def wake_area(x_range, y_range)
-    x_range.each do |cell_x|
-      y_range.each do |cell_y|
-        at(cell_x, cell_y).wake!
-      end
-    end
   end
 
   def dequeue_player_moves

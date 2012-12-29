@@ -73,7 +73,7 @@ class Game
 
   def create_npc(npc)
     x, y = npc['x'], npc['y']
-    conflicts = @space.contents_overlapping(x, y)
+    conflicts = @space.entities_overlapping(x, y)
     if conflicts.empty?
       npc = NPC.new(@space, x, y)
       npc.generate_id

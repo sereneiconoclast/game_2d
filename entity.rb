@@ -5,13 +5,6 @@ class NilClass
   def wake!; end
 end
 
-# Define (2..4) + (3..5) => (2..5)
-class Range
-  def +(other_range)
-    ([min, other_range.min].min .. [max, other_range.max].max)
-  end
-end
-
 class Entity
   include Registerable
 
@@ -57,20 +50,6 @@ class Entity
   end
 
   # X positions near this entity's
-  def nearby_x_range
-    ((self.left_cell_x - 1) .. (self.right_cell_x + 1))
-  end
-
-  # Y positions near this entity's
-  def nearby_y_range
-    ((self.top_cell_y - 1) .. (self.bottom_cell_y + 1))
-  end
-
-  # Notify nearby entities that they must check themselves
-  def wake_surroundings
-    @space.wake_area(nearby_x_range, nearby_y_range)
-  end
-
   # Position in pixels of the upper-left corner
   def pixel_x; @x / PIXEL_WIDTH; end
   def pixel_y; @y / PIXEL_WIDTH; end
@@ -112,34 +91,48 @@ class Entity
   def update_x
     return if @x_vel.zero?
     new_x = @x + @x_vel
-    impacts = @space.contents(occupied_cells(new_x, @y)) - Array(self)
+    impacts = @space.entities_overlapping(new_x, @y).delete(self)
     if impacts.empty?
       @x = new_x
       return
     end
-    impacts.each {|other| other.impacted_by(self) }
-    @x = if @x_vel > 0
-      then impacts.first.left_cell_x - 1   # hit something to our right
-      else impacts.first.right_cell_x + 1  # hit something to our left
-    end * WIDTH
+    @x = if @x_vel > 0 # moving right
+      # X position of leftmost candidate(s)
+      impact_at_x = impacts.collect(&:x).min
+      impacts.delete_if {|e| e.x > impact_at_x }
+      impact_at_x - WIDTH
+    else # moving left
+      # X position of rightmost candidate(s)
+      impact_at_x = impacts.collect(&:x).max
+      impacts.delete_if {|e| e.x < impact_at_x }
+      impact_at_x + WIDTH
+    end
     @x_vel = 0
+    impacts.each {|other| other.impacted_by(self) }
   end
 
   # Process one tick of motion, vertically only
   def update_y
     return if @y_vel.zero?
     new_y = @y + @y_vel
-    impacts = @space.contents(occupied_cells(@x, new_y)) - Array(self)
+    impacts = @space.entities_overlapping(@x, new_y).delete(self)
     if impacts.empty?
       @y = new_y
       return
     end
-    impacts.each {|other| other.impacted_by(self) }
-    @y = if @y_vel > 0
-      then impacts.first.top_cell_y - 1    # hit something below us
-      else impacts.first.bottom_cell_y + 1 # hit something above us
-    end * HEIGHT
+    @y = if @y_vel > 0 # moving down
+      # Y position of highest candidate(s)
+      impact_at_y = impacts.collect(&:y).min
+      impacts.delete_if {|e| e.y > impact_at_y }
+      impact_at_y - HEIGHT
+    else # moving up
+      # Y position of lowest candidate(s)
+      impact_at_y = impacts.collect(&:y).max
+      impacts.delete_if {|e| e.y < impact_at_y }
+      impact_at_y + HEIGHT
+    end
     @y_vel = 0
+    impacts.each {|other| other.impacted_by(self) }
   end
 
   # Process one tick of motion.  Only called when moving? is true
@@ -160,7 +153,7 @@ class Entity
     # Didn't move?  Might be time to go to sleep
     if !moved && sleep_now?
       puts "#{self} going to sleep..."
-      @moving = false 
+      @moving = false
     end
   end
 
