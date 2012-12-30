@@ -202,6 +202,77 @@ class Entity
     end
   end
 
+  # Convert x/y to an angle
+  def vector_to_angle(x_vel=@x_vel, y_vel=@y_vel)
+    return if x_vel == 0 && y_vel == 0
+    return if x_vel != 0 && y_vel != 0
+
+    if x_vel.zero?
+      (y_vel > 0) ? 180 : 0
+    else
+      (x_vel > 0) ? 90 : 270
+    end
+  end
+
+  # Given a vector with a diagonal, drop the smaller component, returning a
+  # vector that is strictly either horizontal or vertical.
+  def drop_diagonal(x_vel, y_vel)
+    (y_vel.abs > x_vel.abs) ? [0, y_vel] : [x_vel, 0]
+  end
+
+  # Is the other entity basically above us, below us, or on the left or the
+  # right?  Returns the angle we should face if we want to face that entity.
+  def direction_to(other_x, other_y)
+    vector_to_angle(*drop_diagonal(other_x - @x, other_y - @y))
+  end
+
+  # Given our current position and velocity (and only if our velocity is not
+  # on a diagonal), are we about to move past the entity at the specified
+  # coordinates?  If so, returns:
+  #
+  # 1) The X/Y position of the empty space just past the entity.  Assuming the
+  # other entity is adjacent to us, this spot touches corners with the other
+  # entity.
+  #
+  # 2) How far we'd go to reach that point.
+  #
+  # 3) How far past that spot we would go.
+  #
+  # 4) Which way we'd have to turn (delta angle) if moving around the other
+  # entity.  Either +90 or -90.
+  def going_past_entity(other_x, other_y)
+    return if @x_vel == 0 && @y_vel == 0
+    return if @x_vel != 0 && @y_vel != 0
+
+    if @x_vel.zero?
+      # Moving vertically.  Find target height
+      y_pos = (@y_vel > 0) ? other_y + HEIGHT : other_y - HEIGHT
+      distance = (@y - y_pos).abs
+      overshoot = @y_vel.abs - distance
+      turn = if @y_vel > 0
+        # Going down: Turn left if it's on our right
+        direction_to(other_x, other_y) == 90 ? -90 : 90
+      else
+        # Going up: Turn right if it's on our right
+        direction_to(other_x, other_y) == 90 ? 90 : -90
+      end
+      return [[@x, y_pos], distance, overshoot, turn] if overshoot >= 0
+    else
+      # Moving horizontally.  Find target column
+      x_pos = (@x_vel > 0) ? other_x + WIDTH : other_x - WIDTH
+      distance = (@x - x_pos).abs
+      overshoot = @x_vel.abs - distance
+      turn = if @x_vel > 0
+        # Going right: Turn right if it's below us
+        direction_to(other_x, other_y) == 180 ? 90 : -90
+      else
+        # Going left: Turn left if it's below us
+        direction_to(other_x, other_y) == 180 ? -90 : 90
+      end
+      return [[x_pos, @y], distance, overshoot, turn] if overshoot >= 0
+    end
+  end
+
   def to_json(*args)
     as_json.to_json(*args)
   end

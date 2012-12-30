@@ -21,18 +21,18 @@ class Player < Entity
     @score = 0
     @moves = []
     @current_move = nil
+    @falling = false
   end
 
   def sleep_now?; false; end
 
-  # Primitive gravity: Accelerate downward if there are no entities underneath
   def update
-    if next_to(self.a + 180).empty? # nothing underfoot
+    underfoot = next_to(self.a + 180)
+    if @falling = underfoot.empty?
       self.a = 0
       accelerate(0, 1)
     else
-      current_move = @moves.shift
-      if current_move
+      if current_move = @moves.shift
         if current_move.is_a? Hash # Currently for 'ping' only
           @conn.send_record :pong => current_move
         elsif [:slide_left, :slide_right, :flip].include? current_move
@@ -43,7 +43,34 @@ class Player < Entity
       end
     end
 
-    super
+    # Only go around corner if sitting on exactly one object
+    if underfoot.size == 1
+      other = underfoot.first
+      # Figure out where corner is and whether we're about to reach or pass it
+      corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
+      if corner
+        # TODO: Check for clearance around the corner
+
+        # Move to the corner
+        @x_vel, @y_vel = angle_to_vector(vector_to_angle, distance)
+        super
+
+        # Turn and apply remaining velocity
+        # Make sure we move at least one subpixel so we don't sit exactly at
+        # the corner, and fall
+        self.a += turn
+        overshoot = 1 if overshoot.zero?
+        @x_vel, @y_vel = angle_to_vector(vector_to_angle + turn, overshoot)
+        super
+      else
+        # Not yet reaching the corner -- or making a diagonal motion, for which
+        # we can't support going around the corner
+        super
+      end
+    else
+      # Straddling two objects, or falling
+      super
+    end
   end
 
   def slide_left; slide(self.a - 90); end
@@ -58,6 +85,7 @@ class Player < Entity
   end
 
   def flip
+    self.a += 180
   end
 
   def add_move(new_move)
@@ -97,6 +125,7 @@ class Player < Entity
   end
 
   def handle_input(window)
+    return if @falling
     move = move_for_keypress(window)
     @conn.send_move move
     add_move move

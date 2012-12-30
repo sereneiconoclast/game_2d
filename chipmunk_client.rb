@@ -117,10 +117,10 @@ class GameWindow < Gosu::Window
     @conn.update(0) # non-blocking
     return unless @conn.online? && @space
 
+    @space.update
+
     # Player at the keyboard queues up a command
     @player.handle_input(self) if @player
-
-    @space.update
   end
 
   def add_npc(json)
