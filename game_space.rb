@@ -15,10 +15,18 @@ require 'wall'
 # I'm using them to represent cells in the game grid, and want to be able to
 # say "Subtract this set of cells from that set".  Treating Sets as equal if
 # their contents are equal defeats this purpose.
+#
+# It's also handy if each Set knows where it lives in the grid.
 
-class Set
+class Cell < Set
   def ==(other); object_id == other.object_id; end
   def eql?(other); object_id == other.object_id; end
+
+  def initialize(cell_x, cell_y)
+    super()
+    @cell_x, @cell_y = cell_x, cell_y
+  end
+  def to_s; "(#{@cell_x}, #{@cell_y}) [#{to_a.join(', ')}]"; end
 end
 
 
@@ -52,7 +60,11 @@ class GameSpace
     # 0) as a usable coordinate.  (-1, -1) contains a Wall, for example.  The
     # at(), put(), and cut() methods do the translation, so only they should
     # access @grid directly
-    @grid = Array.new(cell_width + 2) { Array.new(cell_height + 2) { Set.new } }
+    @grid = Array.new(cell_width + 2) do |cy|
+      Array.new(cell_height + 2) do |cx|
+        Cell.new(cx-1, cy-1)
+      end
+    end
 
     # Top and bottom, including corners
     (-1 .. cell_width).each do |cell_x|
@@ -309,6 +321,30 @@ class GameSpace
     @players.each &:execute_move
 
     @registry.values.find_all(&:moving?).each(&:update)
+
+    check_for_grid_corruption
+  end
+
+  # Assertion
+  def check_for_grid_corruption
+    0.upto(@cell_height - 1) do |cell_y|
+      0.upto(@cell_width - 1) do |cell_x|
+        cell = at(cell_x, cell_y)
+        cell.each do |entity|
+          ok = cells_overlapping(entity.x, entity.y)
+          unless ok.include? cell
+            raise "#{entity} shouldn't be in cell #{cell}"
+          end
+        end
+      end
+    end
+    @registry.values.each do |entity|
+      cells_overlapping(entity.x, entity.y).each do |cell|
+        unless cell.include? entity
+          raise "Expected #{entity} to be in cell #{cell}"
+        end
+      end
+    end
   end
 
   # Assertion.  Used server-side only
