@@ -22,9 +22,9 @@ class Entity
   MAX_VELOCITY = WIDTH
 
   # X and Y position of the top-left corner
-  attr_accessor :x, :y, :a, :x_vel, :y_vel, :moving
+  attr_accessor :x, :y, :x_vel, :y_vel, :moving
 
-  attr_reader :space
+  attr_reader :space, :a
 
   # space: the game space
   # x, y: position in sub-pixels of the upper-left corner
@@ -34,6 +34,8 @@ class Entity
     @space, @x, @y, @a, @x_vel, @y_vel = space, x, y, a, x_vel, y_vel
     @moving = true
   end
+
+  def a=(angle); @a = angle % 360; end
 
   # True if we need to update this entity
   def moving?; @moving; end
@@ -170,10 +172,24 @@ class Entity
     puts "#{self} impacted by #{other}"
   end
 
+  # Return any entities adjacent to this one in the specified direction
+  def next_to(angle)
+    points = case angle % 360
+    when 0 then
+      [[x, y - 1], [x + WIDTH - 1, y - 1]]
+    when 90 then
+      [[x + WIDTH, y], [x + WIDTH, y + HEIGHT - 1]]
+    when 180 then
+      [[x, y + HEIGHT], [x + WIDTH - 1, y + HEIGHT]]
+    when 270 then
+      [[x - 1, y], [x - 1, y + HEIGHT - 1]]
+    else puts "Trig unimplemented"; []
+    end
+    @space.entities_at_points(points)
+  end
+
   def empty_underneath?
-    beneath = space.entities_at_points([
-      [x, y + Entity::HEIGHT], [x + Entity::WIDTH - 1, y + Entity::HEIGHT]
-    ]).empty?
+    next_to(180).empty?
   end
 
   def angle_to_vector(angle, amplitude=1)
@@ -231,8 +247,8 @@ class Entity
     # draw_rot wants us to specify the point around which rotation occurs
     # That should be the center
     img.draw_rot(
-      self.pixel_x + Entity::CELL_WIDTH_IN_PIXELS / 2,
-      self.pixel_y + Entity::CELL_WIDTH_IN_PIXELS / 2,
+      self.pixel_x + CELL_WIDTH_IN_PIXELS / 2,
+      self.pixel_y + CELL_WIDTH_IN_PIXELS / 2,
       ZOrder::Objects, self.a)
     # 0.5, 0.5, # rotate around the center
     # 1, 1, # scaling factor

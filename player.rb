@@ -27,7 +27,8 @@ class Player < Entity
 
   # Primitive gravity: Accelerate downward if there are no entities underneath
   def update
-    if empty_underneath?
+    if next_to(self.a + 180).empty? # nothing underfoot
+      self.a = 0
       accelerate(0, 1)
     else
       current_move = @moves.shift
@@ -45,12 +46,15 @@ class Player < Entity
     super
   end
 
-  def slide_left
-    accelerate(*angle_to_vector(self.a - 90))
-  end
+  def slide_left; slide(self.a - 90); end
+  def slide_right; slide(self.a + 90); end
 
-  def slide_right
-    accelerate(*angle_to_vector(self.a + 90))
+  def slide(dir)
+    if next_to(dir).empty?
+      accelerate(*angle_to_vector(dir))
+    else
+      self.a = dir + 180
+    end
   end
 
   def flip
