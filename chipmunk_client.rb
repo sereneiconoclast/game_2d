@@ -21,15 +21,18 @@ DEFAULT_PORT = 4321
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
+  attr_reader :animation, :font
+
   def initialize(player_name, hostname, port=DEFAULT_PORT)
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Gosu/Chipmunk/ENet Integration Demo"
 
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
-    @cursor_anim = Gosu::Image::load_tiles(self, "media/crosshair.gif", 40, 40, false)
+    @animation = Hash.new do |h, k|
+      h[k] = Gosu::Image::load_tiles(self, k, 40, 40, false)
+    end
 
-    # Load NPC animation using window
-    ClientNPC.load_animation(self)
+    @cursor_anim = @animation["media/crosshair.gif"]
 
     # Put the beep here, as it is the environment now that determines collision
     @beep = Gosu::Sample.new(self, "media/Beep.wav")
@@ -82,7 +85,7 @@ class GameWindow < Gosu::Window
     puts "I am player #{@player.registry_id}"
   end
 
-  def add_player(json, clazz=ClientPlayer, conn=nil)
+  def add_player(json, clazz=Player, conn=nil)
     player = clazz.new(@space, conn, json['player_name'], self)
     player.registry_id = registry_id = json['registry_id']
     puts "Added player #{player}"
@@ -117,20 +120,12 @@ class GameWindow < Gosu::Window
     # Player at the keyboard queues up a command
     @player.handle_input if @player
 
-    # All players dequeue moves
-    @space.dequeue_player_moves
-
     @space.update
   end
 
-  # TODO: Sync with Entity.from_json
   def add_npc(json)
-    x, y = json['position']
-    x_vel, y_vel = json['velocity']
-    angle = json['angle']
-    npc = ClientNPC.new(@space, x, y, angle, x_vel, y_vel)
-    npc.registry_id = json['registry_id']
-    @space << npc
+    json['class'] = 'NPC'
+    @space << Entity.from_json(@space, json)
     # puts "Added #{npc}"
   end
 
@@ -157,11 +152,7 @@ class GameWindow < Gosu::Window
     return unless @player
     @camera_x, @camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-@camera_x, -@camera_y) do
-      (@space.players + @space.npcs).each &:draw
-
-      @space.players.each do |player|
-        @font.draw_rel(player.player_name, player.pixel_x, player.pixel_y - 30, ZOrder::Text, 0.5, 0.5, 1.0, 1.0, Gosu::Color::YELLOW)
-      end
+      (@space.players + @space.npcs).each {|entity| entity.draw(self) }
     end
 
     @space.players.sort.each_with_index do |player, num|

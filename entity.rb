@@ -170,6 +170,22 @@ class Entity
     puts "#{self} impacted by #{other}"
   end
 
+  def empty_underneath?
+    beneath = space.entities_at_points([
+      [x, y + Entity::HEIGHT], [x + Entity::WIDTH - 1, y + Entity::HEIGHT]
+    ]).empty?
+  end
+
+  def angle_to_vector(angle, amplitude=1)
+    case angle % 360
+    when 0 then [0, -amplitude]
+    when 90 then [amplitude, 0]
+    when 180 then [0, amplitude]
+    when 270 then [-amplitude, 0]
+    else raise "Trig unimplemented"
+    end
+  end
+
   def to_json(*args)
     as_json.to_json(*args)
   end
@@ -202,5 +218,25 @@ class Entity
     entity.registry_id = json['registry_id']
     entity.update_from_json(json)
     entity
+  end
+
+  def image_filename
+    raise "No image filename defined"
+  end
+
+  def draw(window)
+    anim = window.animation[image_filename]
+    img = anim[Gosu::milliseconds / 100 % anim.size]
+    # Entity's pixel_x/pixel_y is the location of the upper-left corner
+    # draw_rot wants us to specify the point around which rotation occurs
+    # That should be the center
+    img.draw_rot(
+      self.pixel_x + Entity::CELL_WIDTH_IN_PIXELS / 2,
+      self.pixel_y + Entity::CELL_WIDTH_IN_PIXELS / 2,
+      ZOrder::Objects, self.a)
+    # 0.5, 0.5, # rotate around the center
+    # 1, 1, # scaling factor
+    # @color, # modify color
+    # :add) # draw additively
   end
 end

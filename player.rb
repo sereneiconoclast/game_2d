@@ -4,7 +4,7 @@ require 'zorder'
 
 # The base Player class representing what all Players have in common
 # Moves can be enqueued by calling add_move
-# Calling dequeue_move causes a move to be executed, applying forces
+# Calling update() causes a move to be dequeued and executed, applying forces
 # to the game object
 #
 # The server instantiates this class to represent each connected player
@@ -25,43 +25,39 @@ class Player < Entity
 
   def sleep_now?; false; end
 
-  # TODO...
-  def turn_left
+  # Primitive gravity: Accelerate downward if there are no entities underneath
+  def update
+    if empty_underneath?
+      accelerate(0, 1)
+    else
+      current_move = @moves.shift
+      if current_move
+        if current_move.is_a? Hash # Currently for 'ping' only
+          @conn.send_record :pong => current_move
+        elsif [:slide_left, :slide_right, :flip].include? current_move
+          send current_move
+        else
+          puts "Invalid move for #{self}: #{current_move}"
+        end
+      end
+    end
+
+    super
   end
 
-  def turn_right
+  def slide_left
+    accelerate(*angle_to_vector(self.a - 90))
   end
 
-  def accelerate
+  def slide_right
+    accelerate(*angle_to_vector(self.a + 90))
   end
 
-  def boost
-  end
-
-  def reverse
+  def flip
   end
 
   def add_move(new_move)
     @moves << new_move if new_move
-  end
-
-  def dequeue_move
-    @current_move = @moves.shift
-  end
-
-  def execute_move
-    return unless @current_move
-
-    if @current_move.is_a? Hash # Currently for 'ping' only
-      @conn.send_record :pong => @current_move
-      return nil
-    elsif [:turn_left, :turn_right, :accelerate, :boost, :reverse].include? @current_move
-      send @current_move
-      return @current_move
-    else
-      puts "Invalid move for #{self}: #{@current_move}"
-      return nil
-    end
   end
 
   def <=>(other)
@@ -69,7 +65,7 @@ class Player < Entity
   end
 
   def to_s
-    "#{player_name} (#{registry_id})"
+    "#{player_name} (#{registry_id}) at #{x}x#{y}"
   end
 
   def as_json
@@ -83,38 +79,27 @@ class Player < Entity
   def update_from_json(json)
     @player_name = json['player_name']
     @score = json['score']
-    self.x, self.y = json['position']
-    self.x_vel, self.y_vel = json['velocity']
-    self.moving = json['moving']
-    self.a = json['angle']
-    # TODO @body.w = json['angular_vel'] # radians/second
-  end
-end
-
-# Subclass representing a player client-side
-# Adds drawing capability
-# We instantiate this class directly to represent remote players (not the one
-# at the keyboard)
-# Instances of this class will not have a connection (conn) because players
-# aren't directly connected to each other
-class ClientPlayer < Player
-  def initialize(space, conn, player_name, window)
-    super(space, conn, player_name)
-    @window = window
-    @image = Gosu::Image.new(window, "media/Starfighter.bmp", false)
+    super
   end
 
-  def draw
-    @image.draw_rot(self.pixel_x, self.pixel_y, ZOrder::Objects, self.a)
+  def image_filename; "media/gize0-up.gif"; end
+
+  def draw(window)
+    super
+    window.font.draw_rel(player_name,
+      pixel_x + CELL_WIDTH_IN_PIXELS / 2, pixel_y, ZOrder::Text,
+      0.5, 1.0, # Centered X; above Y
+      1.0, 1.0, Gosu::Color::YELLOW)
   end
 end
 
 # Subclass representing the player at the controls of this client
 # This is different in that we check the keyboard, and send moves
 # to the server in addition to dequeueing them
-class LocalPlayer < ClientPlayer
+class LocalPlayer < Player
   def initialize(space, conn, player_name, window)
-    super
+    super(space, conn, player_name)
+    @window = window
   end
 
   def handle_input
@@ -126,15 +111,9 @@ class LocalPlayer < ClientPlayer
   # Check keyboard, return a motion symbol or nil
   def move_for_keypress
     case
-    when @window.button_down?(Gosu::KbLeft) then :turn_left
-    when @window.button_down?(Gosu::KbRight) then :turn_right
-    when @window.button_down?(Gosu::KbUp) then
-      if @window.button_down?(Gosu::KbRightShift) || @window.button_down?(Gosu::KbLeftShift)
-        :boost
-      else
-        :accelerate
-      end
-    when @window.button_down?(Gosu::KbDown) then :reverse
+    when @window.button_down?(Gosu::KbLeft) then :slide_left
+    when @window.button_down?(Gosu::KbRight) then :slide_right
+    when @window.button_down?(Gosu::KbUp) then :flip
     when @window.button_down?(Gosu::KbP) then @conn.send_ping
     end
   end

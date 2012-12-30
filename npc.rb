@@ -7,12 +7,6 @@ class NPC < Entity
     super
   end
 
-  def empty_underneath?
-    beneath = space.entities_at_points([
-      [x, y + Entity::HEIGHT], [x + Entity::WIDTH - 1, y + Entity::HEIGHT]
-    ]).empty?
-  end
-
   # Primitive gravity: Accelerate downward if there are no entities underneath
   def update
     accelerate(0, 1) if empty_underneath?
@@ -31,33 +25,6 @@ class NPC < Entity
   def as_json
     super().merge( :class => 'NPC' )
   end
-end
 
-class ClientNPC < NPC
-  def self.load_animation(window)
-    @@animation = Gosu::Image::load_tiles(window, "media/tele.gif", 40, 40, false)
-  end
-
-  def initialize(space, x, y, a = 0, x_vel = 0, y_vel = 0)
-    super
-    @color = Gosu::Color.new(0xff000000)
-    @color.red = rand(255 - 40) + 40
-    @color.green = rand(255 - 40) + 40
-    @color.blue = rand(255 - 40) + 40
-  end
-
-  def draw
-    img = @@animation[Gosu::milliseconds / 100 % @@animation.size]
-    # Entity's pixel_x/pixel_y is the location of the upper-left corner
-    # draw_rot wants us to specify the point around which rotation occurs
-    # That should be the center
-    img.draw_rot(
-      self.pixel_x + Entity::CELL_WIDTH_IN_PIXELS / 2,
-      self.pixel_y + Entity::CELL_WIDTH_IN_PIXELS / 2,
-      ZOrder::Objects, self.a,
-      0.5, 0.5, # rotate around the center
-      1, 1, # scaling factor
-      @color, # modify color
-      :add) # draw additively
-  end
+  def image_filename; "media/tele.gif"; end
 end

@@ -100,8 +100,6 @@ class Game
 
       cycle_start = Time.now.to_r
       60.times do |n|
-        @space.dequeue_player_moves
-
         @space.update
         server_port.update
 
