@@ -10,6 +10,18 @@ require 'wall'
 # Also maintains a list of entities due to be deleted, to avoid removing them
 # at the wrong time (during collision processing).
 
+
+# The behavior I want from sets-of-sets is to consider them all unique objects.
+# I'm using them to represent cells in the game grid, and want to be able to
+# say "Subtract this set of cells from that set".  Treating Sets as equal if
+# their contents are equal defeats this purpose.
+
+class Set
+  def ==(other); object_id == other.object_id; end
+  def eql?(other); object_id == other.object_id; end
+end
+
+
 class GameSpace
   attr_reader :registry, :players, :npcs, :cell_width, :cell_height
   attr_accessor :storage
