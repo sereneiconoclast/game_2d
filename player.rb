@@ -91,30 +91,20 @@ class Player < Entity
       0.5, 1.0, # Centered X; above Y
       1.0, 1.0, Gosu::Color::YELLOW)
   end
-end
 
-# Subclass representing the player at the controls of this client
-# This is different in that we check the keyboard, and send moves
-# to the server in addition to dequeueing them
-class LocalPlayer < Player
-  def initialize(space, conn, player_name, window)
-    super(space, conn, player_name)
-    @window = window
-  end
-
-  def handle_input
-    move = move_for_keypress
+  def handle_input(window)
+    move = move_for_keypress(window)
     @conn.send_move move
     add_move move
   end
 
   # Check keyboard, return a motion symbol or nil
-  def move_for_keypress
+  def move_for_keypress(window)
     case
-    when @window.button_down?(Gosu::KbLeft) then :slide_left
-    when @window.button_down?(Gosu::KbRight) then :slide_right
-    when @window.button_down?(Gosu::KbUp) then :flip
-    when @window.button_down?(Gosu::KbP) then @conn.send_ping
+    when window.button_down?(Gosu::KbLeft) then :slide_left
+    when window.button_down?(Gosu::KbRight) then :slide_right
+    when window.button_down?(Gosu::KbUp) then :flip
+    when window.button_down?(Gosu::KbP) then @conn.send_ping
     end
   end
 end

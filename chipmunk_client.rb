@@ -81,12 +81,12 @@ class GameWindow < Gosu::Window
 
   def create_local_player(json)
     raise "Already have player #{@player}!?" if @player
-    @player = add_player(json, LocalPlayer, @conn)
+    @player = add_player(json, @conn)
     puts "I am player #{@player.registry_id}"
   end
 
-  def add_player(json, clazz=Player, conn=nil)
-    player = clazz.new(@space, conn, json['player_name'], self)
+  def add_player(json, conn=nil)
+    player = Player.new(@space, conn, json['player_name'])
     player.registry_id = registry_id = json['registry_id']
     puts "Added player #{player}"
     player.update_from_json(json)
@@ -118,7 +118,7 @@ class GameWindow < Gosu::Window
     return unless @conn.online? && @space
 
     # Player at the keyboard queues up a command
-    @player.handle_input if @player
+    @player.handle_input(self) if @player
 
     @space.update
   end
