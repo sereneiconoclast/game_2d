@@ -204,8 +204,12 @@ class Entity
 
   # Convert x/y to an angle
   def vector_to_angle(x_vel=@x_vel, y_vel=@y_vel)
-    return if x_vel == 0 && y_vel == 0
-    return if x_vel != 0 && y_vel != 0
+    if x_vel == 0 && y_vel == 0
+      return puts "Zero velocity, no angle"
+    end
+    if x_vel != 0 && y_vel != 0
+      return puts "Diagonal velocity (#{x_vel}x#{y_vel}), no angle"
+    end
 
     if x_vel.zero?
       (y_vel > 0) ? 180 : 0

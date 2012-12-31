@@ -49,19 +49,23 @@ class Player < Entity
       # Figure out where corner is and whether we're about to reach or pass it
       corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
       if corner
-        # TODO: Check for clearance around the corner
+        original_speed = @x_vel.abs + @y_vel.abs
 
         # Move to the corner
-        @x_vel, @y_vel = angle_to_vector(vector_to_angle, distance)
+        dir = vector_to_angle
+        @x_vel, @y_vel = angle_to_vector(dir, distance)
         super
 
         # Turn and apply remaining velocity
         # Make sure we move at least one subpixel so we don't sit exactly at
         # the corner, and fall
         self.a += turn
+        dir += turn
         overshoot = 1 if overshoot.zero?
-        @x_vel, @y_vel = angle_to_vector(vector_to_angle + turn, overshoot)
+        @x_vel, @y_vel = angle_to_vector(dir, overshoot)
         super
+
+        @x_vel, @y_vel = angle_to_vector(dir, original_speed)
       else
         # Not yet reaching the corner -- or making a diagonal motion, for which
         # we can't support going around the corner
@@ -124,20 +128,29 @@ class Player < Entity
       1.0, 1.0, Gosu::Color::YELLOW)
   end
 
-  def handle_input(window)
+  def handle_input(window, pressed_buttons)
     return if @falling
-    move = move_for_keypress(window)
+    move = move_for_keypress(window, pressed_buttons)
     @conn.send_move move
     add_move move
   end
 
   # Check keyboard, return a motion symbol or nil
-  def move_for_keypress(window)
+  def move_for_keypress(window, pressed_buttons)
+    # Generated once for each keypress
+    until pressed_buttons.empty?
+      case pressed_buttons.shift
+        when Gosu::KbUp then return :flip
+        when Gosu::KbP then @conn.send_ping; return nil
+        when Gosu::KbLeft, Gosu::KbRight # nothing
+        else puts "Ignoring key #{button}"
+      end
+    end
+
+    # Continuously-generated when key held down
     case
-    when window.button_down?(Gosu::KbLeft) then :slide_left
-    when window.button_down?(Gosu::KbRight) then :slide_right
-    when window.button_down?(Gosu::KbUp) then :flip
-    when window.button_down?(Gosu::KbP) then @conn.send_ping
+      when window.button_down?(Gosu::KbLeft) then :slide_left
+      when window.button_down?(Gosu::KbRight) then :slide_right
     end
   end
 end

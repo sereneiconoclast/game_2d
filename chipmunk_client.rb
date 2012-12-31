@@ -27,6 +27,8 @@ class GameWindow < Gosu::Window
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Gosu/Chipmunk/ENet Integration Demo"
 
+    @pressed_buttons = []
+
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
     @animation = Hash.new do |h, k|
       h[k] = Gosu::Image::load_tiles(self, k, 40, 40, false)
@@ -120,7 +122,8 @@ class GameWindow < Gosu::Window
     @space.update
 
     # Player at the keyboard queues up a command
-    @player.handle_input(self) if @player
+    # @pressed_buttons is emptied by handle_input
+    @player.handle_input(self, @pressed_buttons) if @player
   end
 
   def add_npc(json)
@@ -176,12 +179,15 @@ class GameWindow < Gosu::Window
   def button_down(id)
     case id
       when Gosu::KbEscape then @menu = @top_menu
-      when Gosu::MsLeft then
+      when Gosu::MsLeft then # left-click
         if new_menu = @menu.handle_click
+          # If handle_click returned anything, the menu consumed the click
+          # If it returned a menu, that's the new one we display
           @menu = (new_menu.respond_to?(:handle_click) ? new_menu : @top_menu)
         else
           create_npc
         end
+      else @pressed_buttons << id
     end
   end
 
