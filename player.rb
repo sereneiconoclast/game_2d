@@ -50,22 +50,32 @@ class Player < Entity
       corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
       if corner
         original_speed = @x_vel.abs + @y_vel.abs
+        original_dir = vector_to_angle
+        new_dir = original_dir + turn
 
-        # Move to the corner
-        dir = vector_to_angle
-        @x_vel, @y_vel = angle_to_vector(dir, distance)
-        super
+        # Make sure nothing occupies any space we're about to move through
+        if (
+          (@space.entities_overlapping(*corner) + next_to(new_dir, *corner))
+          .delete self
+        ).empty?
+          # Move to the corner
+          @x_vel, @y_vel = angle_to_vector(original_dir, distance)
+          super
 
-        # Turn and apply remaining velocity
-        # Make sure we move at least one subpixel so we don't sit exactly at
-        # the corner, and fall
-        self.a += turn
-        dir += turn
-        overshoot = 1 if overshoot.zero?
-        @x_vel, @y_vel = angle_to_vector(dir, overshoot)
-        super
+          # Turn and apply remaining velocity
+          # Make sure we move at least one subpixel so we don't sit exactly at
+          # the corner, and fall
+          self.a += turn
+          overshoot = 1 if overshoot.zero?
+          @x_vel, @y_vel = angle_to_vector(new_dir, overshoot)
+          super
 
-        @x_vel, @y_vel = angle_to_vector(dir, original_speed)
+          @x_vel, @y_vel = angle_to_vector(new_dir, original_speed)
+        else
+          # Something's in the way -- possibly in front of us, or possibly
+          # around the corner
+          super
+        end
       else
         # Not yet reaching the corner -- or making a diagonal motion, for which
         # we can't support going around the corner

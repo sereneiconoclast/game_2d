@@ -173,7 +173,7 @@ class Entity
   end
 
   # Return any entities adjacent to this one in the specified direction
-  def next_to(angle)
+  def next_to(angle, x=@x, y=@y)
     points = case angle % 360
     when 0 then
       [[x, y - 1], [x + WIDTH - 1, y - 1]]
