@@ -1,4 +1,6 @@
 require 'registerable'
+require 'facets/string/pathize'
+require 'facets/kernel/constant'
 
 class NilClass
   # Ignore this
@@ -42,8 +44,13 @@ class Entity
 
   # True if this entity can go to sleep now
   # Only called if update() fails to produce any motion
+  # Default: Sleep if we're not moving and not falling
   def sleep_now?
-    raise "Unimplemented on #{self.class}: sleep_now?()"
+    self.x_vel == 0 && self.y_vel == 0 && !should_fall?
+  end
+
+  def should_fall?
+    raise "should_fall? undefined"
   end
 
   # Notify this entity that it must take action
@@ -90,7 +97,7 @@ class Entity
   end
 
   # Process one tick of motion, horizontally only
-  def update_x
+  def move_x
     return if @x_vel.zero?
     new_x = @x + @x_vel
     impacts = @space.entities_overlapping(new_x, @y).delete(self)
@@ -114,7 +121,7 @@ class Entity
   end
 
   # Process one tick of motion, vertically only
-  def update_y
+  def move_y
     return if @y_vel.zero?
     new_y = @y + @y_vel
     impacts = @space.entities_overlapping(@x, new_y).delete(self)
@@ -138,17 +145,13 @@ class Entity
   end
 
   # Process one tick of motion.  Only called when moving? is true
-  def update
+  def move
     # Force evaluation of both update_x and update_y (no short-circuit)
     # If we're moving faster horizontally, do that first
     # Otherwise do the vertical move first
     moved = @space.process_moving_entity(self) do
-      if @x_vel.abs > @y_vel.abs
-        update_x
-        update_y
-      else
-        update_y
-        update_x
+      if @x_vel.abs > @y_vel.abs then move_x; move_y
+      else move_y; move_x
       end
     end
 
@@ -157,6 +160,13 @@ class Entity
       puts "#{self} going to sleep..."
       @moving = false
     end
+  end
+
+  # Handle any behavior specific to this entity
+  # Default: Accelerate downward if the subclass says we should fall
+  def update
+    accelerate(0, 1) if should_fall?
+    move
   end
 
   # Update position/velocity/angle data, and tell the space about it
@@ -301,12 +311,24 @@ class Entity
     warp(new_x, new_y, new_x_vel, new_y_vel, new_angle, new_moving)
   end
 
-  def self.from_json(space, json)
-    clazz = self.class.const_get(json['class'], true)
+  def self.from_json(space, json, generate_id=false)
+    class_name = json['class']
+    raise "Suspicious class name: #{class_name}" unless
+      (class_name == 'Player') || (class_name.start_with? 'Entity::')
+    require class_name.pathize
+    clazz = constant(class_name)
     # TODO: This will only work for NPC, until we get the constructors
     # for NPC/Player in sync
     entity = clazz.new(space, 0, 0)
-    entity.registry_id = json['registry_id']
+
+    # A registry ID must be specified either in the JSON or by the caller, but
+    # not both
+    if generate_id
+      entity.generate_id
+    else
+      entity.registry_id = json['registry_id']
+    end
+
     entity.update_from_json(json)
     entity
   end
@@ -329,5 +351,9 @@ class Entity
     # 1, 1, # scaling factor
     # @color, # modify color
     # :add) # draw additively
+  end
+
+  def to_s
+    "#{self.class} (#{registry_id_safe}) at #{x}x#{y}"
   end
 end

@@ -8,8 +8,8 @@ require 'gosu'
 $LOAD_PATH << '.'
 require 'client_connection'
 require 'game_space'
+require 'entity'
 require 'player'
-require 'npc'
 require 'menu'
 require 'zorder'
 
@@ -44,6 +44,7 @@ class GameWindow < Gosu::Window
     # Local settings
     @local = {
       :create_npc => {
+        :type => 'Entity::Block',
         :snap => false,
       },
     }
@@ -51,16 +52,22 @@ class GameWindow < Gosu::Window
       @local[:create_npc][:snap] ? "Turn snap off" : "Turn snap on"
     end
 
-    submenu = Menu.new('Main menu', self, @font,
-      MenuItem.new(snap_text, self, @font) do |item|
+    object_type_menu = Menu.new('Object type', self, @font,
+      *(%w[Block Titanium].collect do |type_name|
+        MenuItem.new(type_name, self, @font) do |item|
+          @local[:create_npc][:type] = "Entity::#{type_name}"
+        end
+      end)
+    )
+    object_creation_menu = Menu.new('Object creation', self, @font,
+      MenuItem.new('Object type', self, @font) { object_type_menu },
+      MenuItem.new(snap_text, self, @font) do
         @local[:create_npc][:snap] = !@local[:create_npc][:snap]
       end,
-      MenuItem.new('Save!', self, @font) do |item|
-        @conn.send_save
-      end
+      MenuItem.new('Save!', self, @font) { @conn.send_save }
     )
     main_menu = Menu.new('Main menu', self, @font,
-      MenuItem.new('Object creation', self, @font) { submenu },
+      MenuItem.new('Object creation', self, @font) { object_creation_menu },
       MenuItem.new('Quit!', self, @font) { shutdown }
     )
     @menu = @top_menu = MenuItem.new('Click for menu', self, @font) { main_menu }
@@ -127,9 +134,7 @@ class GameWindow < Gosu::Window
   end
 
   def add_npc(json)
-    json['class'] = 'NPC'
     @space << Entity.from_json(@space, json)
-    # puts "Added #{npc}"
   end
 
   def add_npcs(npc_array)
@@ -212,7 +217,13 @@ class GameWindow < Gosu::Window
 #     puts "Adjusted un-snapped X/Y position is #{x}x#{y}"
     end
 
-    @conn.send_create_npc(:x => x, :y => y)
+    @conn.send_create_npc(
+      :class => @local[:create_npc][:type],
+      :position => [x, y],
+      :velocity => [0, 0],
+      :angle => 0,
+      :moving => true
+    )
   end
 
   def shutdown
@@ -232,9 +243,8 @@ class GameWindow < Gosu::Window
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
         case clazz
-        when 'NPC' then add_npc(json)
         when 'Player' then add_player(json)
-        else raise "Unsupported class #{clazz}"
+        else add_npc(json)
         end
       end
 

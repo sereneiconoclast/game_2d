@@ -60,7 +60,7 @@ class Player < Entity
         ).empty?
           # Move to the corner
           @x_vel, @y_vel = angle_to_vector(original_dir, distance)
-          super
+          move
 
           # Turn and apply remaining velocity
           # Make sure we move at least one subpixel so we don't sit exactly at
@@ -68,22 +68,22 @@ class Player < Entity
           self.a += turn
           overshoot = 1 if overshoot.zero?
           @x_vel, @y_vel = angle_to_vector(new_dir, overshoot)
-          super
+          move
 
           @x_vel, @y_vel = angle_to_vector(new_dir, original_speed)
         else
           # Something's in the way -- possibly in front of us, or possibly
           # around the corner
-          super
+          move
         end
       else
         # Not yet reaching the corner -- or making a diagonal motion, for which
         # we can't support going around the corner
-        super
+        move
       end
     else
       # Straddling two objects, or falling
-      super
+      move
     end
   end
 
@@ -149,7 +149,8 @@ class Player < Entity
   def move_for_keypress(window, pressed_buttons)
     # Generated once for each keypress
     until pressed_buttons.empty?
-      case pressed_buttons.shift
+      button = pressed_buttons.shift
+      case button
         when Gosu::KbUp then return :flip
         when Gosu::KbP then @conn.send_ping; return nil
         when Gosu::KbLeft, Gosu::KbRight # nothing

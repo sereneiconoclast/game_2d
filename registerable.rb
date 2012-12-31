@@ -17,6 +17,7 @@ module Registerable
 
   def registry_id=(id)
     raise "#{self}: Already have ID #{@registry_id}, cannot set to #{id}" if @registry_id
+    raise "#{self}: Invalid ID #{id}" unless id
     @registry_id = id
   end
 end

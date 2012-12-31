@@ -263,8 +263,7 @@ class GameSpace
   def entity_list(entity)
     case entity
     when Player then @players
-    when NPC then @npcs
-    else raise "Unknown entity type: #{entity} (#{entity.class})"
+    else @npcs
     end
   end
 

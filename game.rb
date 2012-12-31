@@ -9,8 +9,8 @@ $LOAD_PATH << '.'
 require 'storage'
 require 'server_port'
 require 'game_space'
+require 'entity'
 require 'player'
-require 'npc'
 
 WORLD_WIDTH = 100 # in cells
 WORLD_HEIGHT = 70 # in cells
@@ -71,19 +71,17 @@ class Game
     @space.players.each {|other| other.conn.delete_player player }
   end
 
-  def create_npc(npc)
-    x, y = npc['x'], npc['y']
-    conflicts = @space.entities_overlapping(x, y)
+  def create_npc(json)
+    npc = Entity.from_json(@space, json, true)
+    conflicts = @space.entities_overlapping(npc.x, npc.y)
     if conflicts.empty?
-      npc = NPC.new(@space, x, y)
-      npc.generate_id
 #     npc.a = rand(360)
       puts "Created #{npc}"
       @space << npc
       @space.players.each {|p| p.conn.add_npc npc }
     else
       # TODO: Convey error to user somehow
-      puts "Can't create NPC at #{x}x#{y}, occupied by #{conflicts.inspect}"
+      puts "Can't create #{npc}, occupied by #{conflicts.inspect}"
     end
   end
 
