@@ -313,8 +313,6 @@ class GameSpace
     purge_doomed_entities
 
     @registry.values.find_all(&:moving?).each(&:update)
-
-    check_for_grid_corruption
   end
 
   # Assertion
@@ -339,7 +337,7 @@ class GameSpace
     end
   end
 
-  # Assertion.  Used server-side only
+  # Assertion.  Useful server-side only
   def check_for_registry_leaks
     expected = @players.size + @npcs.size
     actual = @registry.size

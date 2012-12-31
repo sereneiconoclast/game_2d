@@ -37,4 +37,10 @@ class ServerPort
   def update(timeout=0) # non-blocking by default
     @server.update(timeout)
   end
+
+  def update_until(stop_time)
+    while Time.now.to_r < stop_time do
+      update
+    end
+  end
 end

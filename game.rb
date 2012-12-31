@@ -22,8 +22,21 @@ MAX_CLIENTS = 32
 # How many cycles between broadcasts of the registry
 REGISTRY_BROADCAST_EVERY=60 / 4 # Four times a second
 
+class Fixnum
+  def times_profiled
+    sum = 0.0
+    times do |n|
+      before = Time.now.to_f
+      yield n
+      after = Time.now.to_f
+      sum += (after - before)
+    end
+    sum / self
+  end
+end
+
 class Game
-  def initialize(storage, level, cell_width, cell_height)
+  def initialize(storage, level, cell_width, cell_height, self_check, profile)
     @storage = Storage.in_home_dir(storage).dir('server')
     level_storage = @storage[level]
 
@@ -33,6 +46,8 @@ class Game
     else
       @space = GameSpace.load(level_storage)
     end
+
+    @self_check, @profile = self_check, profile
 
     # This should never happen.  It can only happen client-side because a
     # registry update may create an entity before we get around to it in,
@@ -94,24 +109,35 @@ class Game
   end
 
   def run(server_port)
-    loop do
+    # We'll update this every second.  Needs to exist before we create the proc
+    cycle_start = Time.now.to_r
 
-      cycle_start = Time.now.to_r
-      60.times do |n|
-        @space.update
-        server_port.update
+    main_block = proc do |n|
+      @space.update
+      server_port.update
 
+      server_port.broadcast(:registry => @space.registry) if (n % REGISTRY_BROADCAST_EVERY == 0)
+
+      if @self_check
+        @space.check_for_grid_corruption
         @space.check_for_registry_leaks
+      end
 
-        server_port.broadcast(:registry => @space.registry) if (n % REGISTRY_BROADCAST_EVERY == 0)
-
+      unless @profile
         # This results in almost exactly 60 updates per second
-        desired_time = cycle_start + Rational((n + 1), 60)
-        while Time.now.to_r < desired_time do
-          server_port.update
-        end
-      end # 60.times
+        server_port.update_until(cycle_start + Rational((n + 1), 60))
+      end
+    end # main_block
 
+    loop do
+      cycle_start = Time.now.to_r
+      if @profile
+        avg = 60.times_profiled(&main_block)
+        puts "Average time for run(): #{avg}"
+        server_port.update_until(cycle_start + 1)
+      else
+        60.times(&main_block)
+      end
     end # infinite loop
   end
 
@@ -124,9 +150,13 @@ opts = Trollop::options do
   opt :port, "Port number", :default => DEFAULT_PORT
   opt :storage, "Data storage dir (in home directory)", :default => DEFAULT_STORAGE
   opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
+  opt :self_check, "Run data consistency checks", :type => :boolean
+  opt :profile, "Turn on profiling", :type => :boolean
 end
 
-game = Game.new(opts[:storage], opts[:level], opts[:width], opts[:height])
+game = Game.new(
+  opts[:storage], opts[:level], opts[:width], opts[:height],
+  opts[:self_check], opts[:profile])
 
 server_port = ServerPort.new(game, opts[:port], opts[:max_clients])
 
