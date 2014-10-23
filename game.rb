@@ -41,10 +41,10 @@ class Game
     level_storage = @storage[level]
 
     if level_storage.empty?
-      @space = GameSpace.new.establish_world(cell_width, cell_height)
+      @space = GameSpace.new(self).establish_world(cell_width, cell_height)
       @space.storage = level_storage
     else
-      @space = GameSpace.load(level_storage)
+      @space = GameSpace.load(self, level_storage)
     end
 
     @self_check, @profile = self_check, profile
@@ -87,10 +87,12 @@ class Game
   end
 
   def create_npc(json)
-    npc = Entity.from_json(@space, json, true)
-    conflicts = @space.entities_overlapping(npc.x, npc.y)
+    add_npc(Entity.from_json(@space, json, :GENERATE_ID))
+  end
+
+  def add_npc(npc)
+    conflicts = npc.entities_overlapping(npc.x, npc.y)
     if conflicts.empty?
-#     npc.a = rand(360)
       puts "Created #{npc}"
       @space << npc
       @space.players.each {|p| p.conn.add_npc npc }

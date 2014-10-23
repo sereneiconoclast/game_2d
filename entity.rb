@@ -24,23 +24,34 @@ class Entity
   MAX_VELOCITY = WIDTH
 
   # X and Y position of the top-left corner
-  attr_accessor :x, :y, :x_vel, :y_vel, :moving
+  attr_accessor :x, :y, :moving
 
-  attr_reader :space, :a
+  attr_reader :space, :a, :x_vel, :y_vel
 
   # space: the game space
   # x, y: position in sub-pixels of the upper-left corner
   # a: angle, with 0 = up, 90 = right
   # x_vel, y_vel: velocity in sub-pixels
   def initialize(space, x, y, a = 0, x_vel = 0, y_vel = 0)
-    @space, @x, @y, @a, @x_vel, @y_vel = space, x, y, a, x_vel, y_vel
+    @space, @x, @y, self.a = space, x, y, a
+    self.x_vel, self.y_vel = x_vel, y_vel
     @moving = true
   end
 
   def a=(angle); @a = angle % 360; end
 
+  # Velocity is constrained to the range -MAX_VELOCITY .. MAX_VELOCITY
+  def x_vel=(xv)
+    @x_vel = [[xv, MAX_VELOCITY].min, -MAX_VELOCITY].max
+  end
+  def y_vel=(yv)
+    @y_vel = [[yv, MAX_VELOCITY].min, -MAX_VELOCITY].max
+  end
+
   # True if we need to update this entity
   def moving?; @moving; end
+
+  def doomed?; @space.doomed?(self); end
 
   # True if this entity can go to sleep now
   # Only called if update() fails to produce any motion
@@ -90,17 +101,25 @@ class Entity
     x_array.product(y_array)
   end
 
-  # Apply acceleration, limited to the range -MAX_VELOCITY .. MAX_VELOCITY
+  # Apply acceleration
   def accelerate(x_accel, y_accel)
-    @x_vel = [[@x_vel + x_accel, MAX_VELOCITY].min, -MAX_VELOCITY].max
-    @y_vel = [[@y_vel + y_accel, MAX_VELOCITY].min, -MAX_VELOCITY].max
+    self.x_vel = @x_vel + x_accel
+    self.y_vel = @y_vel + y_accel
+  end
+
+  # Wrapper around @space.entities_overlapping
+  # Allows us to remove any entities that are transparent
+  # to us
+  def entities_overlapping(new_x, new_y)
+    @space.entities_overlapping(new_x, new_y).delete(self)
   end
 
   # Process one tick of motion, horizontally only
   def move_x
+    return if doomed?
     return if @x_vel.zero?
     new_x = @x + @x_vel
-    impacts = @space.entities_overlapping(new_x, @y).delete(self)
+    impacts = entities_overlapping(new_x, @y)
     if impacts.empty?
       @x = new_x
       return
@@ -116,15 +135,16 @@ class Entity
       impacts.delete_if {|e| e.x < impact_at_x }
       impact_at_x + WIDTH
     end
-    @x_vel = 0
-    impacts.each {|other| other.impacted_by(self) }
+    self.x_vel = 0
+    i_hit(impacts)
   end
 
   # Process one tick of motion, vertically only
   def move_y
+    return if doomed?
     return if @y_vel.zero?
     new_y = @y + @y_vel
-    impacts = @space.entities_overlapping(@x, new_y).delete(self)
+    impacts = entities_overlapping(@x, new_y)
     if impacts.empty?
       @y = new_y
       return
@@ -140,8 +160,8 @@ class Entity
       impacts.delete_if {|e| e.y < impact_at_y }
       impact_at_y + HEIGHT
     end
-    @y_vel = 0
-    impacts.each {|other| other.impacted_by(self) }
+    self.y_vel = 0
+    i_hit(impacts)
   end
 
   # Process one tick of motion.  Only called when moving? is true
@@ -172,15 +192,17 @@ class Entity
   # Update position/velocity/angle data, and tell the space about it
   def warp(x, y, x_vel, y_vel, angle=self.a, moving=@moving)
     @space.process_moving_entity(self) do
-      @x, @y, @x_vel, @y_vel, @a, @moving =
+      @x, @y, self.x_vel, self.y_vel, self.a, @moving =
         x, y, x_vel, y_vel, angle, moving
     end
   end
 
-  def impacted_by(other)
+  def i_hit(other)
     # TODO
-    puts "#{self} impacted by #{other}"
+    puts "#{self} hit #{other.inspect}"
   end
+
+  def harmed_by(other); end
 
   # Return any entities adjacent to this one in the specified direction
   def next_to(angle, x=@x, y=@y)
@@ -299,8 +321,10 @@ class Entity
       :velocity => [ self.x_vel, self.y_vel ],
       :angle => self.a,
       :moving => self.moving?,
-    }
+    }.merge(additional_state)
   end
+
+  def additional_state; {} end
 
   def update_from_json(json)
     new_x, new_y = json['position']
@@ -337,6 +361,8 @@ class Entity
     raise "No image filename defined"
   end
 
+  def draw_zorder; ZOrder::Objects end
+
   def draw(window)
     anim = window.animation[image_filename]
     img = anim[Gosu::milliseconds / 100 % anim.size]
@@ -346,7 +372,7 @@ class Entity
     img.draw_rot(
       self.pixel_x + CELL_WIDTH_IN_PIXELS / 2,
       self.pixel_y + CELL_WIDTH_IN_PIXELS / 2,
-      ZOrder::Objects, self.a)
+      draw_zorder, self.a)
     # 0.5, 0.5, # rotate around the center
     # 1, 1, # scaling factor
     # @color, # modify color

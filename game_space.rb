@@ -31,10 +31,11 @@ end
 
 
 class GameSpace
-  attr_reader :registry, :players, :npcs, :cell_width, :cell_height
+  attr_reader :registry, :players, :npcs, :cell_width, :cell_height, :game
   attr_accessor :storage
 
-  def initialize
+  def initialize(game=nil)
+    @game = game
     @grid = @storage = nil
 
     @registry = {}
@@ -81,9 +82,9 @@ class GameSpace
     self
   end
 
-  def self.load(storage)
+  def self.load(game, storage)
     cell_width, cell_height = storage['cell_width'], storage['cell_height']
-    space = GameSpace.new.establish_world(cell_width, cell_height)
+    space = GameSpace.new(game).establish_world(cell_width, cell_height)
     space.storage = storage
     space.load
   end
@@ -166,19 +167,17 @@ class GameSpace
     ]
   end
 
-  # Return the entity (if any) at a subpixel point (X, Y)
-  def entity_at_point(x, y)
-    all = at(*cell_at_point(x, y)).find_all do |e|
+  # Return a list of the entities (if any) at a subpixel point (X, Y)
+  def entities_at_point(x, y)
+    at(*cell_at_point(x, y)).find_all do |e|
       e.x <= x && e.x > (x - Entity::WIDTH) &&
       e.y <= y && e.y > (y - Entity::HEIGHT)
     end
-    raise "More than one entity at #{x}x#{y}: #{all.inspect}" if all.size > 1
-    all.first
   end
 
   # Accepts a collection of (x, y)
   def entities_at_points(coords)
-    coords.collect {|x, y| entity_at_point(x, y) }.compact.to_set
+    coords.collect {|x, y| entities_at_point(x, y) }.flatten.to_set
   end
 
   # The set of entities that may be affected by an entity moving to (or from)
@@ -310,9 +309,8 @@ class GameSpace
   end
 
   def update
-    purge_doomed_entities
-
     @registry.values.find_all(&:moving?).each(&:update)
+    purge_doomed_entities
   end
 
   # Assertion

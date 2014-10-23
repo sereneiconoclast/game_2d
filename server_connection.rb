@@ -30,6 +30,10 @@ class ServerConnection
     send_record response, true # answer handshake reliably
   end
 
+  def answer_ping(ping)
+    send_record :pong => ping
+  end
+
   def add_npc(npc)
     send_record 'add_npcs' => [ npc ]
   end
@@ -56,13 +60,13 @@ class ServerConnection
     if (handshake = hash['handshake'])
       answer_handshake(handshake)
     elsif (move = hash['move'])
-      @player.add_move move.to_sym
+      @player.add_move move
     elsif (npc = hash['create_npc'])
       @game.create_npc npc
     elsif (hash['save'])
       @game.save
     elsif (ping = hash['ping'])
-      @player.add_move ping
+      answer_ping ping
     else
       puts "IGNORING BAD DATA: #{hash.inspect}"
     end

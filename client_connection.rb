@@ -66,8 +66,10 @@ class ClientConnection < ENet::Connection
     @game.sync_registry(registry) if registry
   end
 
-  def send_move(move)
-    send_record(:move => move.to_s) if move
+  def send_move(move, args={})
+    return unless move
+    args[:move] = move.to_s
+    send_record :move => args
   end
 
   def send_create_npc(npc)

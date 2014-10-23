@@ -1,4 +1,5 @@
 require 'entity'
+require 'entity/pellet'
 require 'gosu'
 require 'zorder'
 
@@ -26,22 +27,29 @@ class Player < Entity
 
   def sleep_now?; false; end
 
+  # Pellets don't hit the originating player
+  def entities_overlapping(new_x, new_y)
+    super(new_x, new_y).delete_if do |other|
+      other.is_a?(Pellet) && other.owner == self
+    end
+  end
+
   def update
     underfoot = next_to(self.a + 180)
     if @falling = underfoot.empty?
       self.a = 0
       accelerate(0, 1)
-    else
-      if current_move = @moves.shift
-        if current_move.is_a? Hash # Currently for 'ping' only
-          @conn.send_record :pong => current_move
-        elsif [:slide_left, :slide_right, :flip].include? current_move
-          send current_move
-        else
-          puts "Invalid move for #{self}: #{current_move}"
-        end
-      end
     end
+
+    args = @moves.shift
+    case (current_move = args.delete('move').to_sym)
+      when :slide_left, :slide_right, :flip
+        send current_move unless @falling
+      when :fire
+        create_pellet args['x_vel'], args['y_vel']
+      else
+        puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
+    end if args
 
     # Only go around corner if sitting on exactly one object
     if underfoot.size == 1
@@ -59,7 +67,7 @@ class Player < Entity
           .delete self
         ).empty?
           # Move to the corner
-          @x_vel, @y_vel = angle_to_vector(original_dir, distance)
+          self.x_vel, self.y_vel = angle_to_vector(original_dir, distance)
           move
 
           # Turn and apply remaining velocity
@@ -67,10 +75,10 @@ class Player < Entity
           # the corner, and fall
           self.a += turn
           overshoot = 1 if overshoot.zero?
-          @x_vel, @y_vel = angle_to_vector(new_dir, overshoot)
+          self.x_vel, self.y_vel = angle_to_vector(new_dir, overshoot)
           move
 
-          @x_vel, @y_vel = angle_to_vector(new_dir, original_speed)
+          self.x_vel, self.y_vel = angle_to_vector(new_dir, original_speed)
         else
           # Something's in the way -- possibly in front of us, or possibly
           # around the corner
@@ -102,8 +110,11 @@ class Player < Entity
     self.a += 180
   end
 
-  def add_move(new_move)
-    @moves << new_move if new_move
+  def add_move(new_move, args={})
+    return unless new_move
+    return (@moves << new_move) if new_move.is_a?(Hash) # server side
+    args['move'] = new_move
+    @moves << args
   end
 
   def <=>(other)
@@ -128,7 +139,9 @@ class Player < Entity
     super
   end
 
-  def image_filename; "media/gize0-up.gif"; end
+  def image_filename; "media/player.png"; end
+
+  def draw_zorder; ZOrder::Player end
 
   def draw(window)
     super
@@ -163,5 +176,17 @@ class Player < Entity
       when window.button_down?(Gosu::KbLeft) then :slide_left
       when window.button_down?(Gosu::KbRight) then :slide_right
     end
+  end
+
+  def fire(x_vel, y_vel)
+    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
+  end
+
+  def create_pellet(x_vel, y_vel)
+    $stderr.puts "create_pellet #{x_vel}, #{y_vel}"
+    pellet = Entity::Pellet.new(@space, @x, @y, 0, x_vel, y_vel)
+    pellet.owner = self
+    pellet.generate_id
+    @space.game.add_npc pellet
   end
 end

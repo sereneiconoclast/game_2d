@@ -190,31 +190,43 @@ class GameWindow < Gosu::Window
           # If it returned a menu, that's the new one we display
           @menu = (new_menu.respond_to?(:handle_click) ? new_menu : @top_menu)
         else
-          create_npc
+          fire
         end
+      when Gosu::MsRight then # right-click
+        create_npc
       else @pressed_buttons << id
     end
   end
 
-  def create_npc
+  def fire
+    return unless @player
+    x, y = mouse_coords
+    x_vel = (x - (@player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
+    y_vel = (y - (@player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
+    @player.fire x_vel, y_vel
+  end
+
+  # X/Y position of the mouse (center of the crosshairs), adjusted for camera
+  def mouse_coords
     # For some reason, Gosu's mouse_x/mouse_y return Floats, so round it off
-    mx, my = mouse_x.round, mouse_y.round
-    pixel_x, pixel_y = (mx + @camera_x), (my + @camera_y)
-#   puts "Mouse click on pixel #{mx}x#{my}, camera-adjusted to #{pixel_x}x#{pixel_y}"
-    x, y = pixel_x * Entity::PIXEL_WIDTH, pixel_y * Entity::PIXEL_WIDTH
-#   puts "Raw X/Y position of click is #{x}x#{y}"
+    [
+      (mouse_x.round + @camera_x) * Entity::PIXEL_WIDTH,
+      (mouse_y.round + @camera_y) * Entity::PIXEL_WIDTH
+    ]
+  end
+
+  def create_npc
+    x, y = mouse_coords
 
     if @local[:create_npc][:snap]
       # When snap is on, we want the upper-left corner of the cell we clicked in
       x = (x / Entity::WIDTH) * Entity::WIDTH
       y = (y / Entity::HEIGHT) * Entity::HEIGHT
-#     puts "Snapped X/Y position is #{x}x#{y}"
     else
       # When snap is off, we want the click to be the new entity's center, not
       # its upper-left corner
       x -= Entity::WIDTH / 2
       y -= Entity::HEIGHT / 2
-#     puts "Adjusted un-snapped X/Y position is #{x}x#{y}"
     end
 
     @conn.send_create_npc(
