@@ -17,6 +17,9 @@ class Player < Entity
   # Game ticks it takes before a block's HP is raised by 1
   BUILD_TIME = 7
 
+  # Amount to decelerate each tick when braking
+  BRAKE_SPEED = 4
+
   attr_reader :conn, :player_name
   attr_accessor :score, :build_block
 
@@ -54,7 +57,7 @@ class Player < Entity
 
     args = @moves.shift
     case (current_move = args.delete('move').to_sym)
-      when :slide_left, :slide_right, :flip, :build
+      when :slide_left, :slide_right, :brake, :flip, :build
         send current_move unless @falling
       when :fire # server-side only
         fire args['x_vel'], args['y_vel']
@@ -120,6 +123,20 @@ class Player < Entity
     else
       self.a = dir + 180
     end
+  end
+
+  def brake
+    if @x_vel.zero?
+      self.y_vel = brake_velocity(@y_vel)
+    else
+      self.x_vel = brake_velocity(@x_vel)
+    end
+  end
+
+  def brake_velocity(v)
+    return 0 if v.abs < BRAKE_SPEED
+    sign = v <=> 0
+    sign * (v.abs - BRAKE_SPEED)
   end
 
   def flip
@@ -227,6 +244,8 @@ class Player < Entity
         :slide_left
       when window.button_down?(Gosu::KbRight), window.button_down?(Gosu::KbD)
         :slide_right
+      when window.button_down?(Gosu::KbRightControl), window.button_down?(Gosu::KbLeftControl)
+        :brake
       when window.button_down?(Gosu::KbDown), window.button_down?(Gosu::KbS)
         send_build
         nil

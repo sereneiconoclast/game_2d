@@ -34,7 +34,22 @@ class Block < Entity
     super
   end
 
-  def should_fall?; !owner && empty_underneath?; end
+  def should_fall?
+    return false if owner || !empty_underneath?
+
+    case level
+      when 0
+        true
+      when 1
+        empty_on_left? || empty_on_right?
+      when 2
+        empty_on_left? && empty_on_right?
+      when 3
+        empty_on_left? && empty_on_right? && empty_above?
+      when 4
+        false
+    end
+  end
 
   def transparent_to_me?(other)
     super ||

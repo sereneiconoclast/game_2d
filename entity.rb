@@ -232,9 +232,10 @@ class Entity
     @space.entities_at_points(points)
   end
 
-  def empty_underneath?
-    next_to(180).empty?
-  end
+  def empty_underneath?; opaque(next_to(180)).empty?; end
+  def empty_on_left?; opaque(next_to(270)).empty?; end
+  def empty_on_right?; opaque(next_to(90)).empty?; end
+  def empty_above?; opaque(next_to(0)).empty?; end
 
   def angle_to_vector(angle, amplitude=1)
     case angle % 360
