@@ -1,3 +1,5 @@
+require 'entity/block'
+
 class Entity
 
 class Pellet < Entity
@@ -17,7 +19,7 @@ class Pellet < Entity
   def transparent_to_me?(other)
     super ||
     other == self.owner ||
-    (other.is_a?(Pellet) && other.owner == self.owner)
+    ((other.is_a?(Pellet) || other.is_a?(Block)) && other.owner == self.owner)
   end
 
   def i_hit(others)

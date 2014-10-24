@@ -305,6 +305,7 @@ class GameSpace
         fire_entity_not_found(entity)
       end
     end
+    @doomed.each(&:destroy!)
     @doomed.clear
   end
 

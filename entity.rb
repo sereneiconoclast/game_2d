@@ -69,6 +69,9 @@ class Entity
     @moving = true
   end
 
+  # Give this entity a chance to perform clean-up upon destruction
+  def destroy!; end
+
   # X positions near this entity's
   # Position in pixels of the upper-left corner
   def pixel_x; @x / PIXEL_WIDTH; end

@@ -13,7 +13,7 @@ require 'zorder'
 class Player < Entity
   include Comparable
   attr_reader :conn, :player_name
-  attr_accessor :score
+  attr_accessor :score, :build_block
 
   def initialize(space, conn, player_name)
     super(space, 0, 0)
@@ -23,13 +23,20 @@ class Player < Entity
     @moves = []
     @current_move = nil
     @falling = false
+    @build_level = 0
+    @build_block = nil
   end
 
   def sleep_now?; false; end
 
+  def destroy!
+    @build_block.owner = nil if @build_block
+  end
+
   # Pellets don't hit the originating player
   def transparent_to_me?(other)
     super ||
+    (other == @build_block) ||
     (other.is_a?(Pellet) && other.owner == self)
   end
 
@@ -42,10 +49,10 @@ class Player < Entity
 
     args = @moves.shift
     case (current_move = args.delete('move').to_sym)
-      when :slide_left, :slide_right, :flip
+      when :slide_left, :slide_right, :flip, :build
         send current_move unless @falling
-      when :fire
-        create_pellet args['x_vel'], args['y_vel']
+      when :fire # server-side only
+        fire args['x_vel'], args['y_vel']
       else
         puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
     end if args
@@ -91,6 +98,12 @@ class Player < Entity
       # Straddling two objects, or falling
       move
     end
+
+    # Now see if we've moved off of a block we were building
+    if @build_block && !@space.entities_overlapping(@x, @y).include?(@build_block)
+      @build_block.owner = nil
+      disown_block
+    end
   end
 
   def slide_left; slide(self.a - 90); end
@@ -107,6 +120,29 @@ class Player < Entity
   def flip
     self.a += 180
   end
+
+  # Called server-side to create the actual pellet
+  def fire(x_vel, y_vel)
+    pellet = Entity::Pellet.new(@space, @x, @y, 0, x_vel, y_vel)
+    pellet.owner = self
+    pellet.generate_id
+    @space.game.add_npc pellet
+  end
+
+  # Called server-side to create the actual block
+  def build
+    case @build_level
+      when 0
+        return if @build_block
+        @build_block = Entity::Block.new(@space, @x, @y)
+        @build_block.owner = self
+        @build_block.generate_id
+        @space.game.add_npc @build_block
+    end
+    @build_level += 1
+  end
+
+  def disown_block; @build_level, @build_block = 0, nil; end
 
   def add_move(new_move, args={})
     return unless new_move
@@ -149,6 +185,7 @@ class Player < Entity
       1.0, 1.0, Gosu::Color::YELLOW)
   end
 
+  # Called client-side to dequeue an input event
   def handle_input(window, pressed_buttons)
     return if @falling
     move = move_for_keypress(window, pressed_buttons)
@@ -157,6 +194,11 @@ class Player < Entity
   end
 
   # Check keyboard, return a motion symbol or nil
+  #
+  # This is only useful for actions we can safely process
+  # client-side without a server round-trip.  That excludes
+  # any action that creates another entity, since only the
+  # server is allowed to generate registry IDs.
   def move_for_keypress(window, pressed_buttons)
     # Generated once for each keypress
     until pressed_buttons.empty?
@@ -175,18 +217,17 @@ class Player < Entity
         :slide_left
       when window.button_down?(Gosu::KbRight), window.button_down?(Gosu::KbD)
         :slide_right
+      when window.button_down?(Gosu::KbDown), window.button_down?(Gosu::KbS)
+        send_build
+        nil
     end
   end
 
-  def fire(x_vel, y_vel)
+  def send_fire(x_vel, y_vel)
     @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
-  def create_pellet(x_vel, y_vel)
-    $stderr.puts "create_pellet #{x_vel}, #{y_vel}"
-    pellet = Entity::Pellet.new(@space, @x, @y, 0, x_vel, y_vel)
-    pellet.owner = self
-    pellet.generate_id
-    @space.game.add_npc pellet
+  def send_build
+    @conn.send_move :build
   end
 end

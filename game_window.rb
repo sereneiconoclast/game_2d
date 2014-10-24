@@ -189,20 +189,20 @@ class GameWindow < Gosu::Window
           # If it returned a menu, that's the new one we display
           @menu = (new_menu.respond_to?(:handle_click) ? new_menu : @top_menu)
         else
-          fire
+          send_fire
         end
       when Gosu::MsRight then # right-click
-        create_npc
+        send_create_npc
       else @pressed_buttons << id
     end
   end
 
-  def fire
+  def send_fire
     return unless @player
     x, y = mouse_coords
     x_vel = (x - (@player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
     y_vel = (y - (@player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
-    @player.fire x_vel, y_vel
+    @player.send_fire x_vel, y_vel
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -214,7 +214,7 @@ class GameWindow < Gosu::Window
     ]
   end
 
-  def create_npc
+  def send_create_npc
     x, y = mouse_coords
 
     if @local[:create_npc][:snap]
