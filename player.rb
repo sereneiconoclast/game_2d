@@ -162,17 +162,19 @@ class Player < Entity
     until pressed_buttons.empty?
       button = pressed_buttons.shift
       case button
-        when Gosu::KbUp then return :flip
+        when Gosu::KbUp, Gosu::KbW then return :flip
         when Gosu::KbP then @conn.send_ping; return nil
-        when Gosu::KbLeft, Gosu::KbRight # nothing
+        when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
         else puts "Ignoring key #{button}"
       end
     end
 
     # Continuously-generated when key held down
     case
-      when window.button_down?(Gosu::KbLeft) then :slide_left
-      when window.button_down?(Gosu::KbRight) then :slide_right
+      when window.button_down?(Gosu::KbLeft), window.button_down?(Gosu::KbA)
+        :slide_left
+      when window.button_down?(Gosu::KbRight), window.button_down?(Gosu::KbD)
+        :slide_right
     end
   end
 
