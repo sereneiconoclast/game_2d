@@ -107,11 +107,20 @@ class Entity
     self.y_vel = @y_vel + y_accel
   end
 
+  # Override to make particular entities transparent to each other
+  def transparent_to_me?(other)
+    other == self
+  end
+
+  def opaque(others)
+    others.delete_if {|obj| transparent_to_me?(obj)}
+  end
+
   # Wrapper around @space.entities_overlapping
   # Allows us to remove any entities that are transparent
   # to us
-  def entities_overlapping(new_x, new_y)
-    @space.entities_overlapping(new_x, new_y).delete(self)
+  def entities_obstructing(new_x, new_y)
+    opaque(@space.entities_overlapping(new_x, new_y))
   end
 
   # Process one tick of motion, horizontally only
@@ -119,7 +128,7 @@ class Entity
     return if doomed?
     return if @x_vel.zero?
     new_x = @x + @x_vel
-    impacts = entities_overlapping(new_x, @y)
+    impacts = entities_obstructing(new_x, @y)
     if impacts.empty?
       @x = new_x
       return
@@ -144,7 +153,7 @@ class Entity
     return if doomed?
     return if @y_vel.zero?
     new_y = @y + @y_vel
-    impacts = entities_overlapping(@x, new_y)
+    impacts = entities_obstructing(@x, new_y)
     if impacts.empty?
       @y = new_y
       return

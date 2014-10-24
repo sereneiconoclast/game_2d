@@ -14,10 +14,10 @@ class Pellet < Entity
 
   # Pellets don't hit the originating player, or other
   # pellets fired by the same player
-  def entities_overlapping(new_x, new_y)
-    super(new_x, new_y).delete(@owner).delete_if do |other|
-      other.is_a?(Pellet) && other.owner == self.owner
-    end
+  def transparent_to_me?(other)
+    super ||
+    other == self.owner ||
+    (other.is_a?(Pellet) && other.owner == self.owner)
   end
 
   def i_hit(others)

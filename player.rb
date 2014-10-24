@@ -28,10 +28,9 @@ class Player < Entity
   def sleep_now?; false; end
 
   # Pellets don't hit the originating player
-  def entities_overlapping(new_x, new_y)
-    super(new_x, new_y).delete_if do |other|
-      other.is_a?(Pellet) && other.owner == self
-    end
+  def transparent_to_me?(other)
+    super ||
+    (other.is_a?(Pellet) && other.owner == self)
   end
 
   def update
@@ -62,9 +61,8 @@ class Player < Entity
         new_dir = original_dir + turn
 
         # Make sure nothing occupies any space we're about to move through
-        if (
-          (@space.entities_overlapping(*corner) + next_to(new_dir, *corner))
-          .delete self
+        if opaque(
+          @space.entities_overlapping(*corner) + next_to(new_dir, *corner)
         ).empty?
           # Move to the corner
           self.x_vel, self.y_vel = angle_to_vector(original_dir, distance)
@@ -99,7 +97,7 @@ class Player < Entity
   def slide_right; slide(self.a + 90); end
 
   def slide(dir)
-    if next_to(dir).empty?
+    if opaque(next_to(dir)).empty?
       accelerate(*angle_to_vector(dir))
     else
       self.a = dir + 180

@@ -91,7 +91,7 @@ class Game
   end
 
   def add_npc(npc)
-    conflicts = npc.entities_overlapping(npc.x, npc.y)
+    conflicts = npc.entities_obstructing(npc.x, npc.y)
     if conflicts.empty?
       puts "Created #{npc}"
       @space << npc
