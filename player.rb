@@ -1,5 +1,6 @@
 require 'entity'
 require 'entity/pellet'
+require 'entity/block'
 require 'gosu'
 require 'zorder'
 
@@ -12,6 +13,10 @@ require 'zorder'
 # The connection (conn) is the received one for that player
 class Player < Entity
   include Comparable
+
+  # Game ticks it takes before a block's HP is raised by 1
+  BUILD_TIME = 7
+
   attr_reader :conn, :player_name
   attr_accessor :score, :build_block
 
@@ -23,8 +28,8 @@ class Player < Entity
     @moves = []
     @current_move = nil
     @falling = false
-    @build_level = 0
     @build_block = nil
+    @build_level = 0
   end
 
   def sleep_now?; false; end
@@ -131,18 +136,23 @@ class Player < Entity
 
   # Called server-side to create the actual block
   def build
-    case @build_level
-      when 0
-        return if @build_block
-        @build_block = Entity::Block.new(@space, @x, @y)
-        @build_block.owner = self
-        @build_block.generate_id
-        @space.game.add_npc @build_block
+    if @build_block
+      @build_level += 1
+      if @build_level >= BUILD_TIME
+        @build_level = 0
+        @build_block.hp += 1
+      end
+    else
+      @build_block = Entity::Block.new(@space, @x, @y)
+      @build_block.owner = self
+      @build_block.hp = 1
+      @build_block.generate_id
+      @space.game.add_npc @build_block
+      @build_level = 0
     end
-    @build_level += 1
   end
 
-  def disown_block; @build_level, @build_block = 0, nil; end
+  def disown_block; @build_block, @build_level = nil, 0; end
 
   def add_move(new_move, args={})
     return unless new_move

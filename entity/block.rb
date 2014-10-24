@@ -1,10 +1,24 @@
 class Entity
 
 class Block < Entity
-  attr_accessor :owner
+  MAX_LEVEL = 5
+  HP_PER_LEVEL = 5
+  MAX_HP = MAX_LEVEL * HP_PER_LEVEL
 
-  def additional_state; owner ? { :owner => owner.registry_id } : {} end
+  attr_accessor :owner
+  attr_reader :hp
+
+  def hp=(p); @hp = [[p, MAX_HP].min, 0].max; end
+
+  def additional_state
+    {
+      :hp => hp,
+      :owner => (owner ? owner.registry_id : nil),
+    }
+  end
+
   def update_from_json(json)
+    self.hp = json['hp'] if json['hp']
     new_owner = @space[json['owner']]
 
     # This is telling me I need a better solution for keeping
@@ -30,14 +44,21 @@ class Block < Entity
 
   def harmed_by(other)
     puts "#{self}: Ouch!"
-    @space.doom(self)
+    self.hp -= 1
+    @space.doom(self) if hp <= 0
   end
 
   def destroy!
     owner.disown_block if owner
   end
 
-  def image_filename; "media/dirt.gif"; end
+  def level; (hp - 1) / HP_PER_LEVEL; end
+
+  def level_name
+    %w(dirt brick cement steel unlikelium)[level]
+  end
+
+  def image_filename; "media/#{level_name}.gif"; end
 end
 
 end
