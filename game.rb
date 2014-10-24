@@ -79,11 +79,11 @@ class Game
     @space << player
   end
 
-  def delete_player(player)
-    puts "Deleting #{player}"
-    @space.doom player
+  def delete_entity(entity)
+    puts "Deleting #{entity}"
+    @space.doom entity
     @space.purge_doomed_entities
-    @space.players.each {|other| other.conn.delete_player player }
+    @space.players.each {|player| player.conn.delete_entity entity }
   end
 
   def create_npc(json)

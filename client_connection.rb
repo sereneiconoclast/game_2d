@@ -56,8 +56,8 @@ class ClientConnection < ENet::Connection
     players = hash['add_players']
     @game.add_players(players) if players
 
-    players = hash['delete_players']
-    @game.delete_players(players) if players
+    doomed = hash['delete_entities']
+    @game.delete_entities(doomed) if doomed
 
     score_update = hash['update_score']
     @game.update_score(score_update) if score_update

@@ -102,14 +102,6 @@ class GameWindow < Gosu::Window
     @space << player
   end
 
-  def delete_player(player)
-    return unless player
-    raise "We've been kicked!!" if player == @player
-    puts "Disconnected: #{player}"
-    @space.doom player
-    @space.purge_doomed_entities
-  end
-
   def update
     # Gosu calls update() every 16 ms.  This results in about 62 updates per second.
     # We need to get this as close to 60 updates per second as possible.
@@ -145,8 +137,15 @@ class GameWindow < Gosu::Window
     players.each {|json| add_player(json) }
   end
 
-  def delete_players(players)
-    players.each {|reg_id| delete_player(@space[reg_id]) }
+  def delete_entities(doomed)
+    raise "We've been kicked!!" if doomed.include? @player.registry_id
+    doomed.each do |registry_id|
+      dead = @space[registry_id]
+      next unless dead
+      puts "Disconnected: #{dead}" if dead.is_a? Player
+      @space.doom dead
+    end
+    @space.purge_doomed_entities
   end
 
   def update_score(update)

@@ -42,8 +42,8 @@ class ServerConnection
     send_record 'add_players' => [ player ]
   end
 
-  def delete_player(player)
-    send_record 'delete_players' => [ player.registry_id ]
+  def delete_entity(entity)
+    send_record 'delete_entities' => [ entity.registry_id ]
   end
 
   def update_score(player)
@@ -52,7 +52,7 @@ class ServerConnection
 
   def close
     puts "#{@player} -- #{@remote_addr} disconnected"
-    @game.delete_player @player
+    @game.delete_entity @player
   end
 
   def on_packet(data, channel)
