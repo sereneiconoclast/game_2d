@@ -192,6 +192,7 @@ class Entity
       puts "#{self} going to sleep..."
       @moving = false
     end
+    moved
   end
 
   # Handle any behavior specific to this entity

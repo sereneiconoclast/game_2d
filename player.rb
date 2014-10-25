@@ -33,6 +33,7 @@ class Player < Entity
     @falling = false
     @build_block = nil
     @build_level = 0
+    @move_fiber = nil
   end
 
   def sleep_now?; false; end
@@ -49,6 +50,12 @@ class Player < Entity
   end
 
   def update
+    if @move_fiber
+      return if @move_fiber.resume # more work to do
+      @move_fiber = nil
+      self.x_vel = self.y_vel = 0
+    end
+
     underfoot = next_to(self.a + 180)
     if @falling = underfoot.empty?
       self.a = 0
@@ -57,7 +64,7 @@ class Player < Entity
 
     args = @moves.shift
     case (current_move = args.delete('move').to_sym)
-      when :slide_left, :slide_right, :brake, :flip, :build
+      when :slide_left, :slide_right, :brake, :flip, :build, :rise_up
         send current_move unless @falling
       when :fire # server-side only
         fire args['x_vel'], args['y_vel']
@@ -171,6 +178,61 @@ class Player < Entity
 
   def disown_block; @build_block, @build_level = nil, 0; end
 
+  def rise_up
+    @move_fiber = make_rise_up_fiber
+  end
+
+  # Fiber for executing a multi-tick "rise up" maneuver
+  # 1) If not already at center of @build_block, move there @ 1 pixel/tick
+  # 2) Rise exactly 1 cell @ 1 pixel/tick
+  #
+  # If step #2 is interrupted by an obstruction, repeat step #1 and stop
+  # If at any point the @build_block is destroyed, simply abort
+  #
+  # Fiber returns true if it has more work to do, nil if it's finished
+  #
+  # Caller is responsible for zeroing velocity afterward
+  def make_rise_up_fiber
+    blok = @build_block
+    start_x, start_y = blok.x, blok.y
+    l = lambda do
+      # step 1
+      while x != start_x || y != start_y
+        # abort if build_block destroyed
+        return unless blok == @build_block
+
+        self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
+        self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
+        move || return # move failed somehow
+        Fiber.yield true
+      end # end step 1
+
+      self.x_vel, self.y_vel = angle_to_vector(self.a, PIXEL_WIDTH)
+      CELL_WIDTH_IN_PIXELS.times do
+        # abort if build_block destroyed
+        return unless blok == @build_block
+
+        move || break # move failed somehow, go to step 3
+        Fiber.yield true
+      end and return # done step 2
+
+      # Step 2 failed.  Step 3: Repeat step 1
+      while x != start_x || y != start_y
+        # abort if build_block destroyed
+        return unless blok == @build_block
+
+        self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
+        self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
+        move || return # move failed somehow
+        Fiber.yield true
+      end # end step 3
+
+      nil # done step 3
+    end # lambda
+
+    Fiber.new &l
+  end
+
   def add_move(new_move, args={})
     return unless new_move
     return (@moves << new_move) if new_move.is_a?(Hash) # server side
@@ -231,7 +293,8 @@ class Player < Entity
     until pressed_buttons.empty?
       button = pressed_buttons.shift
       case button
-        when Gosu::KbUp, Gosu::KbW then return :flip
+        when Gosu::KbUp, Gosu::KbW
+          return (@build_block) ? :rise_up : :flip
         when Gosu::KbP then @conn.send_ping; return nil
         when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
         else puts "Ignoring key #{button}"
