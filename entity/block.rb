@@ -51,6 +51,15 @@ class Block < Entity
     end
   end
 
+  def update
+    if should_fall?
+      accelerate(0, 1)
+    else
+      self.x_vel = self.y_vel = 0
+    end
+    move
+  end
+
   def transparent_to_me?(other)
     super ||
     (other == owner) ||
