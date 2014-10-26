@@ -188,10 +188,8 @@ class Entity
     end
 
     # Didn't move?  Might be time to go to sleep
-    if !moved && sleep_now?
-      puts "#{self} going to sleep..."
-      @moving = false
-    end
+    @moving = false if !moved && sleep_now?
+
     moved
   end
 
