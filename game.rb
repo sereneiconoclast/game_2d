@@ -36,7 +36,11 @@ class Fixnum
 end
 
 class Game
-  def initialize(storage, level, cell_width, cell_height, self_check, profile)
+  def initialize(
+    port_number, max_clients, storage,
+    level, cell_width, cell_height,
+    self_check, profile
+  )
     @storage = Storage.in_home_dir(storage).dir('server')
     level_storage = @storage[level]
 
@@ -46,6 +50,9 @@ class Game
     else
       @space = GameSpace.load(self, level_storage)
     end
+
+    @tick = 0
+    @player_actions = Hash.new {|h,tick| h[tick] = Array.new}
 
     @self_check, @profile = self_check, profile
 
@@ -62,7 +69,11 @@ class Game
     def @space.fire_entity_not_found(entity)
       raise "Object #{entity} not in registry"
     end
+
+    @port = ServerPort.new(self, port_number, max_clients)
   end
+
+  attr_reader :tick
 
   def world_cell_width; @space.cell_width; end
   def world_cell_height; @space.cell_height; end
@@ -71,19 +82,27 @@ class Game
     @space.save
   end
 
-  def add_player(conn, player_name)
-    player = Player.new(@space, conn, player_name)
+  def add_player(player_name)
+    player = Player.new(@space, player_name)
     player.generate_id
     player.x, player.y = @space.width / 2, @space.height / 2
-    @space.players.each {|p| p.conn.add_player(player) }
+    @space.players.each {|p| player_connection(p).add_player(player) }
     @space << player
+  end
+
+  def player_id_connection(player_id)
+    @port.player_connection(player_id)
+  end
+
+  def player_connection(player)
+   player_connection(player.registry_id)
   end
 
   def delete_entity(entity)
     puts "Deleting #{entity}"
     @space.doom entity
     @space.purge_doomed_entities
-    @space.players.each {|player| player.conn.delete_entity entity }
+    @space.players.each {|player| player_connection(player).delete_entity entity }
   end
 
   def create_npc(json)
@@ -95,11 +114,15 @@ class Game
     if conflicts.empty?
       puts "Created #{npc}"
       @space << npc
-      @space.players.each {|p| p.conn.add_npc npc }
+      @space.players.each {|p| player_connection(p).add_npc npc }
     else
       # TODO: Convey error to user somehow
       puts "Can't create #{npc}, occupied by #{conflicts.inspect}"
     end
+  end
+
+  def [](id)
+    @space[id]
   end
 
   def get_all_players
@@ -110,24 +133,57 @@ class Game
     @space.npcs
   end
 
-  def run(server_port)
+  def add_player_action(player_id, action)
+    at_tick = action['at_tick']
+    unless at_tick
+      $stderr.puts "Received update from #{player_id} without at_tick!"
+      at_tick = @tick
+    end
+    if at_tick < @tick
+      $stderr.puts "Received update from #{player_id} #{@tick - at_tick} ticks late"
+      at_tick = @tick
+    end
+    @player_actions[at_tick] << [player_id, action]
+  end
+
+  def run
     # We'll update this every second.  Needs to exist before we create the proc
     cycle_start = Time.now.to_r
 
     main_block = proc do |n|
-      @space.update
-      server_port.update
+      if actions = @player_actions.delete(@tick)
+        actions.each do |player_id, action|
+          player = @space[player_id]
+          unless player
+            $stderr.puts "No such player #{player_id} -- dropping move"
+            next
+          end
+          if (move = action['move'])
+            player.add_move move
+          elsif (npc = action['create_npc'])
+            create_npc npc
+          else
+            $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
+          end
+        end
+      end
 
-      server_port.broadcast(:registry => @space.registry) if (n % REGISTRY_BROADCAST_EVERY == 0)
+      @space.update
+      @port.update
+
+      @port.broadcast(:registry => @space.registry, :tick => @tick) if
+        (@tick % REGISTRY_BROADCAST_EVERY == 0)
 
       if @self_check
         @space.check_for_grid_corruption
         @space.check_for_registry_leaks
       end
 
+      @tick += 1
+
       unless @profile
         # This results in almost exactly 60 updates per second
-        server_port.update_until(cycle_start + Rational((n + 1), 60))
+        @port.update_until(cycle_start + Rational((n + 1), 60))
       end
     end # main_block
 
@@ -136,7 +192,7 @@ class Game
       if @profile
         avg = 60.times_profiled(&main_block)
         puts "Average time for run(): #{avg}"
-        server_port.update_until(cycle_start + 1)
+        @port.update_until(cycle_start + 1)
       else
         60.times(&main_block)
       end
@@ -157,10 +213,8 @@ opts = Trollop::options do
 end
 
 game = Game.new(
+  opts[:port], opts[:max_clients],
   opts[:storage], opts[:level], opts[:width], opts[:height],
   opts[:self_check], opts[:profile])
 
-server_port = ServerPort.new(game, opts[:port], opts[:max_clients])
-
-puts "ENet server listening on #{opts[:port]}"
-game.run(server_port)
+game.run

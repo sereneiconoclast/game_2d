@@ -10,7 +10,6 @@ require 'zorder'
 # to the game object
 #
 # The server instantiates this class to represent each connected player
-# The connection (conn) is the received one for that player
 class Player < Entity
   include Comparable
 
@@ -20,12 +19,10 @@ class Player < Entity
   # Amount to decelerate each tick when braking
   BRAKE_SPEED = 4
 
-  attr_reader :conn, :player_name
-  attr_accessor :score, :build_block
+  attr_accessor :player_name, :score, :build_block
 
-  def initialize(space, conn, player_name)
+  def initialize(space, player_name)
     super(space, 0, 0)
-    @conn = conn
     @player_name = player_name
     @score = 0
     @moves = []
@@ -37,6 +34,10 @@ class Player < Entity
   end
 
   def sleep_now?; false; end
+
+  def falling?; @falling; end
+
+  def building?; @build_block; end
 
   def destroy!
     @build_block.owner = nil if @build_block
@@ -272,54 +273,5 @@ class Player < Entity
       pixel_x + CELL_WIDTH_IN_PIXELS / 2, pixel_y, ZOrder::Text,
       0.5, 1.0, # Centered X; above Y
       1.0, 1.0, Gosu::Color::YELLOW)
-  end
-
-  # Called client-side to dequeue an input event
-  def handle_input(window, pressed_buttons)
-    return if @falling
-    move = move_for_keypress(window, pressed_buttons)
-    @conn.send_move move
-    add_move move
-  end
-
-  # Check keyboard, return a motion symbol or nil
-  #
-  # This is only useful for actions we can safely process
-  # client-side without a server round-trip.  That excludes
-  # any action that creates another entity, since only the
-  # server is allowed to generate registry IDs.
-  def move_for_keypress(window, pressed_buttons)
-    # Generated once for each keypress
-    until pressed_buttons.empty?
-      button = pressed_buttons.shift
-      case button
-        when Gosu::KbUp, Gosu::KbW
-          return (@build_block) ? :rise_up : :flip
-        when Gosu::KbP then @conn.send_ping; return nil
-        when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
-        else puts "Ignoring key #{button}"
-      end
-    end
-
-    # Continuously-generated when key held down
-    case
-      when window.button_down?(Gosu::KbLeft), window.button_down?(Gosu::KbA)
-        :slide_left
-      when window.button_down?(Gosu::KbRight), window.button_down?(Gosu::KbD)
-        :slide_right
-      when window.button_down?(Gosu::KbRightControl), window.button_down?(Gosu::KbLeftControl)
-        :brake
-      when window.button_down?(Gosu::KbDown), window.button_down?(Gosu::KbS)
-        send_build
-        nil
-    end
-  end
-
-  def send_fire(x_vel, y_vel)
-    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
-  end
-
-  def send_build
-    @conn.send_move :build
   end
 end

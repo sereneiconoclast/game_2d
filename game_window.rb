@@ -90,12 +90,12 @@ class GameWindow < Gosu::Window
 
   def create_local_player(json)
     raise "Already have player #{@player}!?" if @player
-    @player = add_player(json, @conn)
+    @player = add_player(json)
     puts "I am player #{@player.registry_id}"
   end
 
-  def add_player(json, conn=nil)
-    player = Player.new(@space, conn, json['player_name'])
+  def add_player(json)
+    player = Player.new(@space, json['player_name'])
     player.registry_id = registry_id = json['registry_id']
     puts "Added player #{player}"
     player.update_from_json(json)
@@ -122,7 +122,7 @@ class GameWindow < Gosu::Window
 
     # Player at the keyboard queues up a command
     # @pressed_buttons is emptied by handle_input
-    @player.handle_input(self, @pressed_buttons) if @player
+    handle_input if @player
   end
 
   def add_npc(json)
@@ -182,6 +182,7 @@ class GameWindow < Gosu::Window
 
   def button_down(id)
     case id
+      when Gosu::KbP then @conn.send_ping
       when Gosu::KbEscape then @menu = @top_menu
       when Gosu::MsLeft then # left-click
         if new_menu = @menu.handle_click
@@ -202,7 +203,7 @@ class GameWindow < Gosu::Window
     x, y = mouse_coords
     x_vel = (x - (@player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
     y_vel = (y - (@player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
-    @player.send_fire x_vel, y_vel
+    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -241,6 +242,52 @@ class GameWindow < Gosu::Window
     @conn.disconnect(200)
     close
   end
+
+  # Dequeue an input event
+  def handle_input
+    return if @player.falling?
+    move = move_for_keypress
+    @conn.send_move move
+    @player.add_move move
+  end
+
+  # Check keyboard, return a motion symbol or nil
+  #
+  # Returning a symbol is only useful for actions we can
+  # safely process client-side without a server round-trip.
+  # That excludes any action that creates another entity,
+  # since only the server is allowed to generate registry IDs.
+  def move_for_keypress
+    # Generated once for each keypress
+    until @pressed_buttons.empty?
+      button = @pressed_buttons.shift
+      case button
+        when Gosu::KbUp, Gosu::KbW
+          return (@player.building?) ? :rise_up : :flip
+        when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
+        else puts "Ignoring key #{button}"
+      end
+    end
+
+    # Continuously-generated when key held down
+    case
+      when button_down?(Gosu::KbLeft), button_down?(Gosu::KbA)
+        :slide_left
+      when button_down?(Gosu::KbRight), button_down?(Gosu::KbD)
+        :slide_right
+      when button_down?(Gosu::KbRightControl), button_down?(Gosu::KbLeftControl)
+        :brake
+      when button_down?(Gosu::KbDown), button_down?(Gosu::KbS)
+        send_build
+        nil
+    end
+  end
+
+  def send_build
+    @conn.send_move :build
+  end
+
+
 
   def sync_registry(server_registry)
     registry = @space.registry

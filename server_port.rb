@@ -3,10 +3,13 @@ require 'json'
 require 'server_connection'
 
 class ServerPort
-  def initialize(game, port, max_clients)
+  def initialize(game, port_number, max_clients)
     @game = game
-    @server = ENet::Server.new port, max_clients, 2, 0, 0
+    @server = ENet::Server.new port_number, max_clients, 2, 0, 0
+    puts "ENet server listening on #{port_number}"
+
     @clients = {}
+    @player_connections = {}
 
     @server.on_connection method(:on_connection)
     @server.on_packet_receive method(:on_packet_receive)
@@ -15,7 +18,7 @@ class ServerPort
 
   def on_connection(id, ip)
     puts "New ENet connection #{id} from #{ip}"
-    @clients[id] = ServerConnection.new(@game, @server, id, ip)
+    @clients[id] = ServerConnection.new(self, @game, @server, id, ip)
   end
 
   def on_packet_receive(id, data, channel)
@@ -31,6 +34,26 @@ class ServerPort
 
   def broadcast(data, reliable=false, channel=1)
     @server.broadcast_packet data.to_json, reliable, channel
+    @server.flush
+  end
+
+  def register_player(player_id, conn)
+    @player_connections[player_id] = conn
+  end
+
+  def deregister_player(player_id)
+    @player_connections.delete player_id
+  end
+
+  def player_connection(player_id)
+    @player_connections[player_id]
+  end
+
+  # Re-broadcast to everyone except the original sender
+  def broadcast_player_action(sender_id, data, channel)
+    @clients.keys.each do |id|
+      @server.send_packet(id, data, false, channel) unless id == sender_id
+    end
     @server.flush
   end
 

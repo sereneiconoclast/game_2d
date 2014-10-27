@@ -5,8 +5,8 @@ require 'json'
 
 class ServerConnection
 
-  def initialize(game, server, id, remote_addr)
-    @game, @server, @id, @remote_addr = game, server, id, remote_addr
+  def initialize(port, game, server, id, remote_addr)
+    @port, @game, @server, @id, @remote_addr = port, game, server, id, remote_addr
     puts "ServerConnection: New connection #{id} from #{remote_addr}"
   end
 
@@ -15,19 +15,26 @@ class ServerConnection
     other_players = @game.get_all_players.dup
 
     player_name = handshake['player_name']
-    @player = @game.add_player(self, player_name)
+    player = @game.add_player(player_name)
+    @player_id = player.registry_id
+    @port.register_player @player_id, self
 
     response = {
-      'you_are' => @player,
+      'you_are' => player,
       'world' => {
         :cell_width => @game.world_cell_width,
         :cell_height => @game.world_cell_height,
       },
       'add_players' => other_players,
       'add_npcs' => @game.get_all_npcs,
+      'tick' => @game.tick,
     }
-    puts "#{@player} logs in from #{@remote_addr}"
+    puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
     send_record response, true # answer handshake reliably
+  end
+
+  def player
+    @game[@player_id]
   end
 
   def answer_ping(ping)
@@ -51,29 +58,28 @@ class ServerConnection
   end
 
   def close
-    puts "#{@player} -- #{@remote_addr} disconnected"
-    @game.delete_entity @player
+    @port.deregister_player @player_id
+    toast = player
+    puts "#{toast} -- #{@remote_addr} disconnected at <#{@game.tick}>"
+    @game.delete_entity toast
   end
 
   def on_packet(data, channel)
     hash = JSON.parse data
     if (handshake = hash['handshake'])
       answer_handshake(handshake)
-    elsif (move = hash['move'])
-      @player.add_move move
-    elsif (npc = hash['create_npc'])
-      @game.create_npc npc
     elsif (hash['save'])
       @game.save
     elsif (ping = hash['ping'])
       answer_ping ping
     else
-      puts "IGNORING BAD DATA: #{hash.inspect}"
+      @game.add_player_action @player_id, hash
+      @port.broadcast_player_action @id, data, channel
     end
   end
 
   def send_registry(registry)
-    send_record :registry => registry
+    send_record :registry => registry, :tick => @game.tick
   end
 
   def send_record(hash, reliable=false, channel=0)

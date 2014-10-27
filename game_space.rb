@@ -1,5 +1,6 @@
 require 'set'
 require 'wall'
+require 'player'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).
@@ -10,23 +11,26 @@ require 'wall'
 # Also maintains a list of entities due to be deleted, to avoid removing them
 # at the wrong time (during collision processing).
 
-
-# The behavior I want from sets-of-sets is to consider them all unique objects.
-# I'm using them to represent cells in the game grid, and want to be able to
-# say "Subtract this set of cells from that set".  Treating Sets as equal if
-# their contents are equal defeats this purpose.
+# Cell is a portion of the game space, the exact size of one entity.
+# The cell (0,0) contains subpixel coordinates (0,0) through (399,399).
 #
-# It's also handy if each Set knows where it lives in the grid.
+# The behavior I want from sets-of-cells is to consider them all unique objects.
+# I want to be able to say "Subtract this set of cells from that set".  Treating
+# Sets as equal if their contents are equal defeats this purpose.
+#
+# It's also handy if each Cell knows where it lives in the grid.
 
 class Cell < Set
+  attr_reader :x, :y
+
   def ==(other); object_id == other.object_id; end
   def eql?(other); object_id == other.object_id; end
 
   def initialize(cell_x, cell_y)
     super()
-    @cell_x, @cell_y = cell_x, cell_y
+    @x, @y = cell_x, cell_y
   end
-  def to_s; "(#{@cell_x}, #{@cell_y}) [#{to_a.join(', ')}]"; end
+  def to_s; "(#{x}, #{y}) [#{to_a.join(', ')}]"; end
 end
 
 
@@ -44,14 +48,12 @@ class GameSpace
     # have been processed, to avoid confusion
     @doomed = []
 
-    @players = Array.new
-    @npcs = Array.new
+    @players = []
+    @npcs = []
   end
 
   # Width and height, measured in cells
-  # TODO: This may now be safe to fold into initialize()
   def establish_world(cell_width, cell_height)
-    puts "World is #{cell_width}x#{cell_height} cells"
     @cell_width, @cell_height = cell_width, cell_height
 
     # Outer array is X-indexed; inner arrays are Y-indexed
@@ -78,6 +80,18 @@ class GameSpace
       put(-1, cell_y, Wall.new(self, -1, cell_y))                 # left
       put(cell_width, cell_y, Wall.new(self, cell_width, cell_y)) # right
     end
+
+    self
+  end
+
+  def copy_from(original)
+    establish_world(original.cell_width, original.cell_height)
+
+    # @game and @storage should point to the same object (no clone)
+    @game, @storage = original.game, original.storage
+
+    # Registry should contain all objects - clone those
+    original.registry.each {|id, ent| self << ent.clone}
 
     self
   end
