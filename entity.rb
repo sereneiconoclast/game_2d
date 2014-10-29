@@ -345,6 +345,7 @@ class Entity
     new_moving = json['moving']
 
     warp(new_x, new_y, new_x_vel, new_y_vel, new_angle, new_moving)
+    self
   end
 
   def self.from_json(space, json, generate_id=false)

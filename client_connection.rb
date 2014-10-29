@@ -6,6 +6,7 @@ require 'json'
 
 class ClientConnection < ENet::Connection
   attr_reader :player_name
+  attr_accessor :engine
 
   def initialize(host, port, game, player_name, timeout=2000)
     # remote host address, remote host port, channels, download bandwidth, upload bandwidth
@@ -50,30 +51,32 @@ class ClientConnection < ENet::Connection
       @game.create_local_player handshake_response
     end
 
+    at_tick = hash['at_tick']
+
     npcs = hash['add_npcs']
-    @game.add_npcs(npcs) if npcs
+    @engine.add_npcs(npcs, at_tick) if npcs
 
     players = hash['add_players']
-    @game.add_players(players) if players
+    @engine.add_players(players, at_tick) if players
 
     doomed = hash['delete_entities']
-    @game.delete_entities(doomed) if doomed
+    @engine.delete_entities(doomed, at_tick) if doomed
 
     score_update = hash['update_score']
-    @game.update_score(score_update) if score_update
+    @engine.update_score(score_update, at_tick) if score_update
 
     registry = hash['registry']
-    @game.sync_registry(registry) if registry
+    @engine.sync_registry(registry, at_tick) if registry
   end
 
-  def send_move(move, args={})
+  def send_move(at_tick, move, args={})
     return unless move
     args[:move] = move.to_s
-    send_record :move => args
+    send_record :at_tick => at_tick, :move => args
   end
 
-  def send_create_npc(npc)
-    send_record(:create_npc => npc)
+  def send_create_npc(at_tick, npc)
+    send_record(:at_tick => at_tick, :create_npc => npc)
   end
 
   def send_save

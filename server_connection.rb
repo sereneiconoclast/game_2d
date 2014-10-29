@@ -41,20 +41,21 @@ class ServerConnection
     send_record :pong => ping
   end
 
-  def add_npc(npc)
-    send_record 'add_npcs' => [ npc ]
+  def add_npc(npc, at_tick)
+    send_record 'add_npcs' => [ npc ], 'at_tick' => at_tick
   end
 
-  def add_player(player)
-    send_record 'add_players' => [ player ]
+  def add_player(player, at_tick)
+    send_record 'add_players' => [ player ], 'at_tick' => at_tick
   end
 
-  def delete_entity(entity)
-    send_record 'delete_entities' => [ entity.registry_id ]
+  def delete_entity(entity, at_tick)
+    send_record 'delete_entities' => [ entity.registry_id ], 'at_tick' => at_tick
   end
 
-  def update_score(player)
-    send_record 'update_score' => { player.registry_id => player.score }
+  # Not called yet...
+  def update_score(player, at_tick)
+    send_record 'update_score' => { player.registry_id => player.score }, 'at_tick' => at_tick
   end
 
   def close

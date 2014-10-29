@@ -18,20 +18,28 @@ SCREEN_HEIGHT = 480 # in pixels
 
 DEFAULT_PORT = 4321
 
+# We tell the server to execute all actions this many ticks
+# in the future, to give the message time to propagate around
+# the fleet
+ACTION_DELAY = 6 # 1/10 of a second
+
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
   attr_reader :animation, :font
 
   def initialize(player_name, hostname, port=DEFAULT_PORT)
+    $server = false
+
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
-    self.caption = "Gosu/Chipmunk/ENet Integration Demo"
+    self.caption = "Ruby Gosu Game"
 
     @pressed_buttons = []
 
     @background_image = Gosu::Image.new(self, "media/Space.png", true)
     @animation = Hash.new do |h, k|
-      h[k] = Gosu::Image::load_tiles(self, k, 40, 40, false)
+      h[k] = Gosu::Image::load_tiles(
+        self, k, Entity::CELL_WIDTH_IN_PIXELS, Entity::CELL_WIDTH_IN_PIXELS, false)
     end
 
     @cursor_anim = @animation["media/crosshair.gif"]
@@ -81,25 +89,31 @@ class GameWindow < Gosu::Window
   end
 
   def establish_world(world)
-    @space = GameSpace.new.establish_world(
+    space = GameSpace.new.establish_world(
       world['cell_width'], world['cell_height'])
-
     # No action for fire_object_not_found
     # We may remove an object during a registry update that we were about to doom
+
+    @engine = ClientEngine.new(space, world['tick'])
+    @conn.engine = @engine
+  end
+
+  def space
+    @engine.space
+  end
+
+  def send_actions_at
+    @engine.tick + ACTION_DELAY
+  end
+
+  def player
+    space[@player_id]
   end
 
   def create_local_player(json)
-    raise "Already have player #{@player}!?" if @player
-    @player = add_player(json)
-    puts "I am player #{@player.registry_id}"
-  end
-
-  def add_player(json)
-    player = Player.new(@space, json['player_name'])
-    player.registry_id = registry_id = json['registry_id']
-    puts "Added player #{player}"
-    player.update_from_json(json)
-    @space << player
+    raise "Already have player #{@player_id}!?" if @player_id
+    @player_id = @engine.add_player(json)
+    puts "I am player #{@player_id}"
   end
 
   def update
@@ -116,53 +130,24 @@ class GameWindow < Gosu::Window
 
     # Handle any pending ENet events
     @conn.update(0) # non-blocking
-    return unless @conn.online? && @space
+    return unless @conn.online? && @engine
 
-    @space.update
+    @engine.update
 
     # Player at the keyboard queues up a command
     # @pressed_buttons is emptied by handle_input
-    handle_input if @player
-  end
-
-  def add_npc(json)
-    @space << Entity.from_json(@space, json)
-  end
-
-  def add_npcs(npc_array)
-    npc_array.each {|json| add_npc(json) }
-  end
-
-  def add_players(players)
-    players.each {|json| add_player(json) }
-  end
-
-  def delete_entities(doomed)
-    raise "We've been kicked!!" if doomed.include? @player.registry_id
-    doomed.each do |registry_id|
-      dead = @space[registry_id]
-      next unless dead
-      puts "Disconnected: #{dead}" if dead.is_a? Player
-      @space.doom dead
-    end
-    @space.purge_doomed_entities
-  end
-
-  def update_score(update)
-    registry_id, score = update.to_a.first
-    return unless player = @space[registry_id]
-    player.score = score
+    handle_input if @player_id
   end
 
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
-    return unless @player
-    @camera_x, @camera_y = @space.good_camera_position_for(@player, SCREEN_WIDTH, SCREEN_HEIGHT)
+    return unless @player_id
+    @camera_x, @camera_y = space.good_camera_position_for(player, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-@camera_x, -@camera_y) do
-      (@space.players + @space.npcs).each {|entity| entity.draw(self) }
+      (space.players + space.npcs).each {|entity| entity.draw(self) }
     end
 
-    @space.players.sort.each_with_index do |player, num|
+    space.players.sort.each_with_index do |player, num|
       @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::Text, 1.0, 1.0, Gosu::Color::YELLOW)
     end
 
@@ -199,11 +184,11 @@ class GameWindow < Gosu::Window
   end
 
   def send_fire
-    return unless @player
+    return unless @player_id
     x, y = mouse_coords
     x_vel = (x - (@player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
     y_vel = (y - (@player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
-    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
+    @conn.send_move send_actions_at, :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -230,6 +215,7 @@ class GameWindow < Gosu::Window
     end
 
     @conn.send_create_npc(
+      send_actions_at,
       :class => @local[:create_npc][:type],
       :position => [x, y],
       :velocity => [0, 0],
@@ -245,10 +231,10 @@ class GameWindow < Gosu::Window
 
   # Dequeue an input event
   def handle_input
-    return if @player.falling?
+    return if player.falling?
     move = move_for_keypress
-    @conn.send_move move
-    @player.add_move move
+    @conn.send_move send_actions_at, move
+    player.add_move move
   end
 
   # Check keyboard, return a motion symbol or nil
@@ -263,7 +249,7 @@ class GameWindow < Gosu::Window
       button = @pressed_buttons.shift
       case button
         when Gosu::KbUp, Gosu::KbW
-          return (@player.building?) ? :rise_up : :flip
+          return (player.building?) ? :rise_up : :flip
         when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
         else puts "Ignoring key #{button}"
       end
@@ -284,35 +270,7 @@ class GameWindow < Gosu::Window
   end
 
   def send_build
-    @conn.send_move :build
-  end
-
-
-
-  def sync_registry(server_registry)
-    registry = @space.registry
-    my_keys = registry.keys
-
-    server_registry.each do |registry_id, json|
-      my_obj = registry[registry_id]
-      if my_obj
-        my_obj.update_from_json(json)
-      else
-        clazz = json['class']
-        puts "Don't have #{clazz} #{registry_id}, adding it"
-        case clazz
-        when 'Player' then add_player(json)
-        else add_npc(json)
-        end
-      end
-
-      my_keys.delete registry_id
-    end
-
-    my_keys.each do |registry_id|
-      puts "Server doesn't have #{registry_id}, deleting it"
-      @space.doom @space[registry_id]
-    end
+    @conn.send_move send_actions_at, :build
   end
 end
 

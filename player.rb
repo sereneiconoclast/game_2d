@@ -33,6 +33,13 @@ class Player < Entity
     @move_fiber = nil
   end
 
+  def self.from_json(space, json)
+    player = Player.new(space, json['player_name'])
+    player.registry_id = registry_id = json['registry_id']
+    puts "Added player #{player}"
+    player.update_from_json(json)
+  end
+
   def sleep_now?; false; end
 
   def falling?; @falling; end
@@ -153,6 +160,7 @@ class Player < Entity
 
   # Called server-side to create the actual pellet
   def fire(x_vel, y_vel)
+    return unless $server
     pellet = Entity::Pellet.new(@space, @x, @y, 0, x_vel, y_vel)
     pellet.owner = self
     pellet.generate_id
@@ -161,6 +169,7 @@ class Player < Entity
 
   # Called server-side to create the actual block
   def build
+    return unless $server
     if @build_block
       @build_level += 1
       if @build_level >= BUILD_TIME

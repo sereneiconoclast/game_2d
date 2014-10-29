@@ -41,6 +41,8 @@ class Game
     level, cell_width, cell_height,
     self_check, profile
   )
+    $server = true
+
     @storage = Storage.in_home_dir(storage).dir('server')
     level_storage = @storage[level]
 
@@ -86,7 +88,7 @@ class Game
     player = Player.new(@space, player_name)
     player.generate_id
     player.x, player.y = @space.width / 2, @space.height / 2
-    @space.players.each {|p| player_connection(p).add_player(player) }
+    @space.players.each {|p| player_connection(p).add_player(player, @tick) }
     @space << player
   end
 
@@ -102,9 +104,10 @@ class Game
     puts "Deleting #{entity}"
     @space.doom entity
     @space.purge_doomed_entities
-    @space.players.each {|player| player_connection(player).delete_entity entity }
+    @space.players.each {|player| player_connection(player).delete_entity entity, @tick }
   end
 
+  # Answering request from client
   def create_npc(json)
     add_npc(Entity.from_json(@space, json, :GENERATE_ID))
   end
@@ -114,7 +117,7 @@ class Game
     if conflicts.empty?
       puts "Created #{npc}"
       @space << npc
-      @space.players.each {|p| player_connection(p).add_npc npc }
+      @space.players.each {|p| player_connection(p).add_npc npc, @tick }
     else
       # TODO: Convey error to user somehow
       puts "Can't create #{npc}, occupied by #{conflicts.inspect}"
