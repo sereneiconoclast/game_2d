@@ -34,6 +34,7 @@ class ClientConnection < ENet::Connection
 
   def on_packet(data, channel)
     hash = JSON.parse data
+    debug_packet('Received', hash)
 
     pong = hash['pong']
     if pong
@@ -41,29 +42,26 @@ class ClientConnection < ENet::Connection
       puts "Ping took #{stop - pong['start']} seconds"
     end
 
+    at_tick = hash['at_tick']
+    fail "No at_tick in #{hash.inspect}" unless at_tick
+
     world = hash['world']
     if world
-      @game.establish_world(world)
+      @game.establish_world(world, at_tick)
     end
 
-    handshake_response = hash['you_are']
-    if handshake_response
-      @game.create_local_player handshake_response
+    delta_keys = %w(add_players add_npcs delete_entities update_score move)
+    @engine.add_delta(hash) if delta_keys.any? {|k| hash.has_key? k}
+
+    you_are = hash['you_are']
+    if you_are
+      # The 'world' response includes deltas for add_players and add_npcs
+      # Need to process those first, as one of the players is us
+      @engine.apply_deltas(at_tick)
+
+      @engine.create_local_player you_are
     end
 
-    at_tick = hash['at_tick']
-
-    npcs = hash['add_npcs']
-    @engine.add_npcs(npcs, at_tick) if npcs
-
-    players = hash['add_players']
-    @engine.add_players(players, at_tick) if players
-
-    doomed = hash['delete_entities']
-    @engine.delete_entities(doomed, at_tick) if doomed
-
-    score_update = hash['update_score']
-    @engine.update_score(score_update, at_tick) if score_update
 
     registry = hash['registry']
     @engine.sync_registry(registry, at_tick) if registry
@@ -88,7 +86,14 @@ class ClientConnection < ENet::Connection
   end
 
   def send_record(data, reliable=false)
+    debug_packet('Sending', data)
     send_packet(data.to_json, reliable, 0)
     flush
+  end
+
+  def debug_packet(direction, hash)
+    at_tick = hash['at_tick'] || 'NO TICK'
+    keys = hash.keys - ['at_tick']
+    puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
   end
 end

@@ -7,6 +7,7 @@ require 'gosu'
 
 $LOAD_PATH << '.'
 require 'client_connection'
+require 'client_engine'
 require 'game_space'
 require 'entity'
 require 'player'
@@ -27,6 +28,7 @@ ACTION_DELAY = 6 # 1/10 of a second
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
   attr_reader :animation, :font
+  attr_accessor :player_id
 
   def initialize(player_name, hostname, port=DEFAULT_PORT)
     $server = false
@@ -88,13 +90,13 @@ class GameWindow < Gosu::Window
     @last_update = Time.now.to_r
   end
 
-  def establish_world(world)
+  def establish_world(world, at_tick)
     space = GameSpace.new.establish_world(
       world['cell_width'], world['cell_height'])
     # No action for fire_object_not_found
     # We may remove an object during a registry update that we were about to doom
 
-    @engine = ClientEngine.new(space, world['tick'])
+    @engine = ClientEngine.new(self, space, at_tick)
     @conn.engine = @engine
   end
 
@@ -108,12 +110,6 @@ class GameWindow < Gosu::Window
 
   def player
     space[@player_id]
-  end
-
-  def create_local_player(json)
-    raise "Already have player #{@player_id}!?" if @player_id
-    @player_id = @engine.add_player(json)
-    puts "I am player #{@player_id}"
   end
 
   def update

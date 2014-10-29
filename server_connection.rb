@@ -11,23 +11,20 @@ class ServerConnection
   end
 
   def answer_handshake(handshake)
-    # Copy this array since it's about to change
-    other_players = @game.get_all_players.dup
-
     player_name = handshake['player_name']
     player = @game.add_player(player_name)
     @player_id = player.registry_id
     @port.register_player @player_id, self
 
     response = {
-      'you_are' => player,
+      'you_are' => @player_id,
       'world' => {
         :cell_width => @game.world_cell_width,
         :cell_height => @game.world_cell_height,
       },
-      'add_players' => other_players,
+      'add_players' => @game.get_all_players,
       'add_npcs' => @game.get_all_npcs,
-      'tick' => @game.tick,
+      'at_tick' => @game.tick,
     }
     puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
     send_record response, true # answer handshake reliably
@@ -67,6 +64,7 @@ class ServerConnection
 
   def on_packet(data, channel)
     hash = JSON.parse data
+    debug_packet('Received', hash)
     if (handshake = hash['handshake'])
       answer_handshake(handshake)
     elsif (hash['save'])
@@ -74,19 +72,27 @@ class ServerConnection
     elsif (ping = hash['ping'])
       answer_ping ping
     else
-      @game.add_player_action @player_id, hash
-      @port.broadcast_player_action @id, data, channel
+      @game.add_player_action @player_id, hash.dup
+      hash['player_id'] = @player_id
+      @port.broadcast_player_action @id, hash, channel
     end
   end
 
   def send_registry(registry)
-    send_record :registry => registry, :tick => @game.tick
+    send_record :registry => registry, :at_tick => @game.tick
   end
 
   def send_record(hash, reliable=false, channel=0)
+    debug_packet('Sending', hash)
     send_str = hash.to_json
     # Send data to the client (client ID, data, reliable or not, channel ID)
     @server.send_packet(@id, send_str, reliable, channel)
     @server.flush
+  end
+
+  def debug_packet(direction, hash)
+    at_tick = hash['at_tick'] || 'NO TICK'
+    keys = hash.keys - ['at_tick']
+    puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
   end
 end

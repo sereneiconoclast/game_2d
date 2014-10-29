@@ -23,24 +23,12 @@ require 'game_space'
 class ClientEngine
   attr_reader :tick
 
-  def initialize(space, tick)
+  def initialize(game_window, space, tick)
+    @game_window = game_window
     @spaces = {tick => space}
     @earliest_tick = @tick = tick
 
-    @player_actions = Hash.new {|h,tick| h[tick] = Array.new}
-  end
-
-  def add_player_action(player_id, action)
-    at_tick = action['at_tick']
-    unless at_tick
-      $stderr.puts "Received update from #{player_id} without at_tick!"
-      at_tick = @tick
-    end
-    if at_tick < @tick
-      $stderr.puts "Received update from #{player_id} #{@tick - at_tick} ticks late"
-      at_tick = @tick
-    end
-    @player_actions[at_tick] << [player_id, action]
+    @deltas = Hash.new {|h,tick| h[tick] = Array.new}
   end
 
   def space_at(tick)
@@ -49,9 +37,11 @@ class ClientEngine
     fail "Can't create space at #{tick}; earliest space we know about is #{@earliest_tick}" if tick < @earliest_tick
 
     last_space = space_at(tick - 1)
+    puts "Creating space at <#{tick}>"
     @spaces[tick] = new_space = GameSpace.new.copy_from(last_space)
+    apply_deltas(tick)
 
-    @player_actions[tick].each do |player_id, action|
+    @deltas[tick].each do |player_id, action|
       player = new_space[player_id]
       unless player
         $stderr.puts "No such player #{player_id} -- dropping move"
@@ -71,6 +61,7 @@ class ClientEngine
   end
 
   def update
+    puts "ClientEngine UPDATE"
     space_at(@tick += 1)
   end
 
@@ -78,27 +69,76 @@ class ClientEngine
     @spaces[@tick]
   end
 
-  def add_player(json, at_tick)
+  def create_local_player(player_id)
+    old_player_id = @game_window.player_id
+    fail "Already have player #{old_player_id}!?" if old_player_id
+
+    @game_window.player_id = player_id
+    puts "I am player #{player_id}"
+  end
+
+  def add_delta(delta)
+    at_tick = delta.delete 'at_tick'
+    if at_tick < @tick
+      $stderr.puts "Received delta #{@tick - at_tick} ticks late"
+      if at_tick <= @earliest_tick
+        $stderr.puts "Discarding it - we've received registry sync at <#{@earliest_tick}>"
+        return
+      end
+    end
+    @deltas[at_tick] << delta
+  end
+
+  def apply_deltas(at_tick)
+    puts "Applying deltas at <#{at_tick}>"
     space = space_at(at_tick)
-    player = Player.new(space, json['player_name'])
-    player.registry_id = registry_id = json['registry_id']
+
+    @deltas[at_tick].each do |hash|
+      npcs = hash['add_npcs']
+      add_npcs(space, npcs) if npcs
+
+      players = hash['add_players']
+      add_players(space, players) if players
+
+      doomed = hash['delete_entities']
+      delete_entities(space, doomed) if doomed
+
+      move = hash['move']
+      apply_move(space, move) if move
+
+      score_update = hash['update_score']
+      update_score(space, score_update) if score_update
+    end
+
+    # Any later spaces are now invalid
+    @spaces.delete_if {|key, _| key > at_tick}
+  end
+
+  def add_player(space, hash)
+    player = Player.new(space, hash['player_name'])
+    player.registry_id = registry_id = hash['registry_id']
     puts "Added player #{player}"
-    player.update_from_json(json)
+    player.update_from_json(hash)
     space << player
     registry_id
   end
 
-  def add_players(players, at_tick)
-    players.each {|json| add_player(json, at_tick) }
+  def add_players(space, players)
+    players.each {|json| add_player(space, json) }
   end
 
-  def add_npcs(npcs, at_tick)
-    space = space_at(at_tick)
+  def apply_move(space, move)
+    player_id = move['player_id']
+    player = space[player_id]
+    fail "No such player #{player_id}, can't apply #{move.inspect}" unless player
+    player.add_move move['move']
+  end
+
+  def add_npcs(space, npcs)
     npcs.each {|json| space << Entity.from_json(space, json) }
   end
 
-  def delete_entities(doomed, at_tick)
-    space = space_at(at_tick)
+  def delete_entities(space, doomed)
     doomed.each do |registry_id|
       dead = space[registry_id]
       next unless dead
@@ -108,18 +148,21 @@ class ClientEngine
     space.purge_doomed_entities
   end
 
-  def update_score(update, at_tick)
-    space = space_at(at_tick)
+  def update_score(space, update)
     registry_id, score = update.to_a.first
     return unless player = space[registry_id]
     player.score = score
   end
 
   def sync_registry(server_registry, at_tick)
-    @earliest_tick.upto(at_tick - 1) {|old_tick| @spaces.delete old}
-    @earliest_tick = at_tick if at_tick > @earliest_tick
-
     space = space_at(at_tick)
+    @earliest_tick.upto(at_tick - 1) do |old_tick|
+      @spaces.delete old_tick
+      @deltas.delete old_tick
+    end
+    @earliest_tick = [at_tick, @earliest_tick].max
+    @tick = [at_tick, @tick].max
+
     registry = space.registry
     my_keys = registry.keys.to_set
 
@@ -129,7 +172,8 @@ class ClientEngine
       else
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
-        space << clazz.from_json(space, json)
+        method_in_class = (clazz == 'Player') ? Player : Entity
+        space << method_in_class.from_json(space, json)
       end
 
       my_keys.delete registry_id

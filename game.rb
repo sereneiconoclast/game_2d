@@ -88,6 +88,7 @@ class Game
     player = Player.new(@space, player_name)
     player.generate_id
     player.x, player.y = @space.width / 2, @space.height / 2
+    # We notify existing players first, *then* add the new player
     @space.players.each {|p| player_connection(p).add_player(player, @tick) }
     @space << player
   end
@@ -174,7 +175,7 @@ class Game
       @space.update
       @port.update
 
-      @port.broadcast(:registry => @space.registry, :tick => @tick) if
+      @port.broadcast(:registry => @space.registry, :at_tick => @tick) if
         (@tick % REGISTRY_BROADCAST_EVERY == 0)
 
       if @self_check

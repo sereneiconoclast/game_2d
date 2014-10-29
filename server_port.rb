@@ -50,7 +50,8 @@ class ServerPort
   end
 
   # Re-broadcast to everyone except the original sender
-  def broadcast_player_action(sender_id, data, channel)
+  def broadcast_player_action(sender_id, hash, channel)
+    data = hash.to_json
     @clients.keys.each do |id|
       @server.send_packet(id, data, false, channel) unless id == sender_id
     end
