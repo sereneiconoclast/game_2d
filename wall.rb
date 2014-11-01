@@ -2,7 +2,8 @@ require 'entity'
 
 class Wall < Entity
   def initialize(space, cell_x, cell_y)
-    super(space, cell_x * Entity::WIDTH, cell_y * Entity::HEIGHT)
+    super(cell_x * Entity::WIDTH, cell_y * Entity::HEIGHT)
+    self.space = space
   end
 
   def moving?; false; end

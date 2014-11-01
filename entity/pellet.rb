@@ -1,16 +1,9 @@
 require 'entity/block'
+require 'entity/owned_entity'
 
 class Entity
 
-class Pellet < Entity
-  attr_accessor :owner
-
-  def additional_state; { :owner => owner.registry_id } end
-  def update_from_json(json)
-    @owner = @space[json['owner']]
-    super
-  end
-
+class Pellet < OwnedEntity
   def should_fall?; true end
   def sleep_now?; false end
 

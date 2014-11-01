@@ -85,9 +85,10 @@ class Game
   end
 
   def add_player(player_name)
-    player = Player.new(@space, player_name)
+    player = Player.new(player_name)
     player.generate_id
-    player.x, player.y = @space.width / 2, @space.height / 2
+    player.x = (@space.width - Entity::WIDTH) / 2
+    player.y = (@space.height - Entity::HEIGHT) / 2
     # We notify existing players first, *then* add the new player
     @space.players.each {|p| player_connection(p).add_player(player, @tick) }
     @space << player
@@ -98,7 +99,7 @@ class Game
   end
 
   def player_connection(player)
-   player_connection(player.registry_id)
+    player_id_connection(player.registry_id)
   end
 
   def delete_entity(entity)
@@ -110,19 +111,17 @@ class Game
 
   # Answering request from client
   def create_npc(json)
-    add_npc(Entity.from_json(@space, json, :GENERATE_ID))
+    add_npc(Entity.from_json(json, :GENERATE_ID))
   end
 
   def add_npc(npc)
-    conflicts = npc.entities_obstructing(npc.x, npc.y)
-    if conflicts.empty?
-      puts "Created #{npc}"
-      @space << npc
-      @space.players.each {|p| player_connection(p).add_npc npc, @tick }
-    else
-      # TODO: Convey error to user somehow
-      puts "Can't create #{npc}, occupied by #{conflicts.inspect}"
-    end
+    @space << npc or return
+    puts "Created #{npc}"
+    @space.players.each {|p| player_connection(p).add_npc npc, @tick }
+  end
+
+  def send_updated_entity(entity)
+    @space.players.each {|p| player_connection(p).update_entity entity, @tick }
   end
 
   def [](id)
@@ -141,11 +140,11 @@ class Game
     at_tick = action['at_tick']
     unless at_tick
       $stderr.puts "Received update from #{player_id} without at_tick!"
-      at_tick = @tick
+      at_tick = @tick + 1
     end
-    if at_tick < @tick
-      $stderr.puts "Received update from #{player_id} #{@tick - at_tick} ticks late"
-      at_tick = @tick
+    if at_tick <= @tick
+      $stderr.puts "Received update from #{player_id} #{@tick + 1 - at_tick} ticks late"
+      at_tick = @tick + 1
     end
     @player_actions[at_tick] << [player_id, action]
   end

@@ -50,7 +50,9 @@ class ClientConnection < ENet::Connection
       @game.establish_world(world, at_tick)
     end
 
-    delta_keys = %w(add_players add_npcs delete_entities update_score move)
+    delta_keys = %w(
+      add_players add_npcs delete_entities update_entities update_score move
+    )
     @engine.add_delta(hash) if delta_keys.any? {|k| hash.has_key? k}
 
     you_are = hash['you_are']
@@ -92,8 +94,8 @@ class ClientConnection < ENet::Connection
   end
 
   def debug_packet(direction, hash)
-    at_tick = hash['at_tick'] || 'NO TICK'
-    keys = hash.keys - ['at_tick']
+    at_tick = hash['at_tick'] || hash[:at_tick] || 'NO TICK'
+    keys = hash.keys - ['at_tick', :at_tick]
     puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
   end
 end

@@ -1,36 +1,22 @@
+require 'entity/owned_entity'
+
 class Entity
 
-class Block < Entity
+class Block < OwnedEntity
   MAX_LEVEL = 5
   HP_PER_LEVEL = 5
   MAX_HP = MAX_LEVEL * HP_PER_LEVEL
 
-  attr_accessor :owner
   attr_reader :hp
 
   def hp=(p); @hp = [[p, MAX_HP].min, 0].max; end
 
   def additional_state
-    {
-      :hp => hp,
-      :owner => (owner ? owner.registry_id : nil),
-    }
+    super.merge!(:hp => hp)
   end
 
   def update_from_json(json)
     self.hp = json['hp'] if json['hp']
-    new_owner = @space[json['owner']]
-
-    # This is telling me I need a better solution for keeping
-    # the client in sync with the server.  This logic is too
-    # complicated and specific.
-    if new_owner
-      new_owner.build_block = self
-    elsif self.owner
-      self.owner.build_block = nil
-    end
-
-    self.owner = new_owner
     super
   end
 

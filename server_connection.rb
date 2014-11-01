@@ -50,6 +50,10 @@ class ServerConnection
     send_record 'delete_entities' => [ entity.registry_id ], 'at_tick' => at_tick
   end
 
+  def update_entity(entity, at_tick)
+    send_record 'update_entities' => [ entity ], 'at_tick' => at_tick
+  end
+
   # Not called yet...
   def update_score(player, at_tick)
     send_record 'update_score' => { player.registry_id => player.score }, 'at_tick' => at_tick
@@ -72,9 +76,10 @@ class ServerConnection
     elsif (ping = hash['ping'])
       answer_ping ping
     else
-      @game.add_player_action @player_id, hash.dup
-      hash['player_id'] = @player_id
-      @port.broadcast_player_action @id, hash, channel
+      @game.add_player_action @player_id, hash
+      @port.broadcast_player_action @id,
+        hash.merge('player_id' => @player_id),
+        channel
     end
   end
 

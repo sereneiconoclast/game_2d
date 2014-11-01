@@ -32,8 +32,8 @@ class Entity
   # x, y: position in sub-pixels of the upper-left corner
   # a: angle, with 0 = up, 90 = right
   # x_vel, y_vel: velocity in sub-pixels
-  def initialize(space, x, y, a = 0, x_vel = 0, y_vel = 0)
-    @space, @x, @y, self.a = space, x, y, a
+  def initialize(x, y, a = 0, x_vel = 0, y_vel = 0)
+    @x, @y, self.a = x, y, a
     self.x_vel, self.y_vel = x_vel, y_vel
     @moving = true
   end
@@ -123,6 +123,7 @@ class Entity
   # Allows us to remove any entities that are transparent
   # to us
   def entities_obstructing(new_x, new_y)
+    fail "No @space set!" unless @space
     opaque(@space.entities_overlapping(new_x, new_y))
   end
 
@@ -202,9 +203,14 @@ class Entity
 
   # Update position/velocity/angle data, and tell the space about it
   def warp(x, y, x_vel, y_vel, angle=self.a, moving=@moving)
-    @space.process_moving_entity(self) do
+    blk = proc do
       @x, @y, self.x_vel, self.y_vel, self.a, @moving =
         x, y, x_vel, y_vel, angle, moving
+    end
+    if @space
+      @space.process_moving_entity(self, &blk)
+    else
+      blk.call
     end
   end
 
@@ -348,15 +354,13 @@ class Entity
     self
   end
 
-  def self.from_json(space, json, generate_id=false)
+  def self.from_json(json, generate_id=false)
     class_name = json['class']
     raise "Suspicious class name: #{class_name}" unless
       (class_name == 'Player') || (class_name.start_with? 'Entity::')
     require class_name.pathize
     clazz = constant(class_name)
-    # TODO: This will only work for NPC, until we get the constructors
-    # for NPC/Player in sync
-    entity = clazz.new(space, 0, 0)
+    entity = clazz.new(0, 0)
 
     # A registry ID must be specified either in the JSON or by the caller, but
     # not both
@@ -369,6 +373,14 @@ class Entity
     entity.update_from_json(json)
     entity
   end
+
+  def space=(new_space)
+    @space = new_space
+    on_added_to_space if new_space
+  end
+
+  # Late initialization code to be run during @space << entity
+  def on_added_to_space; end
 
   def image_filename
     raise "No image filename defined"
@@ -394,5 +406,8 @@ class Entity
 
   def to_s
     "#{self.class} (#{registry_id_safe}) at #{x}x#{y}"
+  end
+  def ==(other)
+    self.equal? other
   end
 end

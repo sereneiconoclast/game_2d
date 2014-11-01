@@ -63,8 +63,8 @@ class GameSpace
     # 0) as a usable coordinate.  (-1, -1) contains a Wall, for example.  The
     # at(), put(), and cut() methods do the translation, so only they should
     # access @grid directly
-    @grid = Array.new(cell_width + 2) do |cy|
-      Array.new(cell_height + 2) do |cx|
+    @grid = Array.new(cell_width + 2) do |cx|
+      Array.new(cell_height + 2) do |cy|
         Cell.new(cx-1, cy-1)
       end
     end
@@ -91,7 +91,7 @@ class GameSpace
     @game, @storage = original.game, original.storage
 
     # Registry should contain all objects - clone those
-    original.registry.each {|id, ent| self << ent.clone}
+    original.registry.each {|id, ent| self << ent.clone }
 
     self
   end
@@ -114,7 +114,7 @@ class GameSpace
   def load
     @storage['npcs'].each do |json|
       puts "Loading #{json.inspect}"
-      self << Entity.from_json(self, json)
+      self << Entity.from_json(json)
     end
     self
   end
@@ -144,19 +144,17 @@ class GameSpace
   # zero-based
   def at(cell_x, cell_y)
     assert_ok_coords(cell_x, cell_y)
-    @grid[cell_x - 1][cell_y - 1]
+    @grid[cell_x + 1][cell_y + 1]
   end
 
   # Low-level adder
   def put(cell_x, cell_y, entity)
-    assert_ok_coords(cell_x, cell_y)
-    @grid[cell_x - 1][cell_y - 1] << entity
+    at(cell_x, cell_y) << entity
   end
 
   # Low-level remover
   def cut(cell_x, cell_y, entity)
-    assert_ok_coords(cell_x, cell_y)
-    @grid[cell_x - 1][cell_y - 1].delete entity
+    at(cell_x, cell_y).delete entity
   end
 
   # Translate a subpixel point (X, Y) to a cell coordinate (cell_x, cell_y)
@@ -291,11 +289,19 @@ class GameSpace
       fire_duplicate_id(old, entity)
       old
     else
-      @registry[reg_id] = entity
-      entity_list(entity) << entity
-      add_entity_to_grid(entity)
-      entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
-      entity
+      entity.space = self
+      conflicts = entity.entities_obstructing(entity.x, entity.y)
+      if conflicts.empty?
+        @registry[reg_id] = entity
+        entity_list(entity) << entity
+        add_entity_to_grid(entity)
+        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
+        entity
+      else
+        entity.space = nil
+        # TODO: Convey error to user somehow
+        $stderr.puts "Can't create #{entity}, occupied by #{conflicts.inspect}"
+      end
     end
   end
 

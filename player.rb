@@ -21,8 +21,8 @@ class Player < Entity
 
   attr_accessor :player_name, :score, :build_block
 
-  def initialize(space, player_name)
-    super(space, 0, 0)
+  def initialize(player_name)
+    super(0, 0)
     @player_name = player_name
     @score = 0
     @moves = []
@@ -33,8 +33,8 @@ class Player < Entity
     @move_fiber = nil
   end
 
-  def self.from_json(space, json)
-    player = Player.new(space, json['player_name'])
+  def self.from_json(json)
+    player = Player.new(json['player_name'])
     player.registry_id = registry_id = json['registry_id']
     puts "Added player #{player}"
     player.update_from_json(json)
@@ -58,6 +58,7 @@ class Player < Entity
   end
 
   def update
+    fail "No space set for #{self}" unless @space
     if @move_fiber
       return if @move_fiber.resume # more work to do
       @move_fiber = nil
@@ -161,7 +162,7 @@ class Player < Entity
   # Called server-side to create the actual pellet
   def fire(x_vel, y_vel)
     return unless $server
-    pellet = Entity::Pellet.new(@space, @x, @y, 0, x_vel, y_vel)
+    pellet = Entity::Pellet.new(@x, @y, 0, x_vel, y_vel)
     pellet.owner = self
     pellet.generate_id
     @space.game.add_npc pellet
@@ -175,18 +176,20 @@ class Player < Entity
       if @build_level >= BUILD_TIME
         @build_level = 0
         @build_block.hp += 1
+        @space.game.send_updated_entity @build_block
       end
     else
-      @build_block = Entity::Block.new(@space, @x, @y)
-      @build_block.owner = self
-      @build_block.hp = 1
-      @build_block.generate_id
+      self.build_block = Entity::Block.new(@x, @y).tap do |bb|
+        bb.owner = self
+        bb.hp = 1
+        bb.generate_id
+      end
       @space.game.add_npc @build_block
       @build_level = 0
     end
   end
 
-  def disown_block; @build_block, @build_level = nil, 0; end
+  def disown_block; $stderr.puts "#{self} disowning #{@build_block}"; @build_block, @build_level = nil, 0; end
 
   def rise_up
     @move_fiber = make_rise_up_fiber
@@ -243,6 +246,9 @@ class Player < Entity
     Fiber.new &l
   end
 
+  # Server side: Accepts a hash, with a key 'move' => 'move_type'
+  # Client side: Accepts a symbol for the move, plus a hash with
+  # additional args
   def add_move(new_move, args={})
     return unless new_move
     return (@moves << new_move) if new_move.is_a?(Hash) # server side
@@ -252,6 +258,10 @@ class Player < Entity
 
   def <=>(other)
     self.player_name <=> other.player_name
+  end
+
+  def ==(other)
+    self.equal? other
   end
 
   def to_s

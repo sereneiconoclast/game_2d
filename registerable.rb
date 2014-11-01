@@ -1,9 +1,14 @@
 require 'securerandom'
 
+class Object
+  def nullsafe_registry_id; nil; end
+end
+
 module Registerable
   def registry_id
     @registry_id or raise("No ID set for #{self}")
   end
+  def nullsafe_registry_id; registry_id; end
 
   # For use in to_s
   def registry_id_safe

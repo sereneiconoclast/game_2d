@@ -182,8 +182,8 @@ class GameWindow < Gosu::Window
   def send_fire
     return unless @player_id
     x, y = mouse_coords
-    x_vel = (x - (@player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
-    y_vel = (y - (@player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
+    x_vel = (x - (player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
+    y_vel = (y - (player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
     @conn.send_move send_actions_at, :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
@@ -237,8 +237,14 @@ class GameWindow < Gosu::Window
   #
   # Returning a symbol is only useful for actions we can
   # safely process client-side without a server round-trip.
-  # That excludes any action that creates another entity,
-  # since only the server is allowed to generate registry IDs.
+  # Any action that creates another entity must be sent to the
+  # server and processed there first, since only the server is
+  # allowed to generate registry IDs.  TODO: This could possibly
+  # be fixed, by assigning an ID to every move, and having the
+  # server send back the ID of the move that created the object.
+  # Then the client could make up a temporary ID for its idea of
+  # the object, and substitute the actual ID as soon as it hears
+  # what that is.
   def move_for_keypress
     # Generated once for each keypress
     until @pressed_buttons.empty?

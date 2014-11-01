@@ -37,31 +37,14 @@ class ClientEngine
     fail "Can't create space at #{tick}; earliest space we know about is #{@earliest_tick}" if tick < @earliest_tick
 
     last_space = space_at(tick - 1)
-    puts "Creating space at <#{tick}>"
     @spaces[tick] = new_space = GameSpace.new.copy_from(last_space)
     apply_deltas(tick)
-
-    @deltas[tick].each do |player_id, action|
-      player = new_space[player_id]
-      unless player
-        $stderr.puts "No such player #{player_id} -- dropping move"
-        next
-      end
-      if (move = action['move'])
-        player.add_move move
-      else
-        # No other client-side processing we can do
-        # We can't 'create_npc' in the client; the server assigns registry IDs
-        $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
-      end
-    end
 
     new_space.update
     new_space
   end
 
   def update
-    puts "ClientEngine UPDATE"
     space_at(@tick += 1)
   end
 
@@ -90,7 +73,6 @@ class ClientEngine
   end
 
   def apply_deltas(at_tick)
-    puts "Applying deltas at <#{at_tick}>"
     space = space_at(at_tick)
 
     @deltas[at_tick].each do |hash|
@@ -102,6 +84,9 @@ class ClientEngine
 
       doomed = hash['delete_entities']
       delete_entities(space, doomed) if doomed
+
+      updated = hash['update_entities']
+      update_entities(space, updated) if updated
 
       move = hash['move']
       apply_move(space, move) if move
@@ -115,7 +100,7 @@ class ClientEngine
   end
 
   def add_player(space, hash)
-    player = Player.new(space, hash['player_name'])
+    player = Player.new(hash['player_name'])
     player.registry_id = registry_id = hash['registry_id']
     puts "Added player #{player}"
     player.update_from_json(hash)
@@ -135,7 +120,23 @@ class ClientEngine
   end
 
   def add_npcs(space, npcs)
-    npcs.each {|json| space << Entity.from_json(space, json) }
+    npcs.each {|json| space << Entity.from_json(json) }
+  end
+
+  def update_entities(space, updated)
+    registry = space.registry
+    updated.each do |json|
+      registry_id = json['registry_id']
+      fail "Can't update #{entity.inspect}, no registry_id!" unless registry_id
+      if my_obj = registry[registry_id]
+        my_obj.update_from_json(json)
+      else
+        clazz = json['class']
+        puts "Don't have #{clazz} #{registry_id}, adding it"
+        method_in_class = (clazz == 'Player') ? Player : Entity
+        space << method_in_class.from_json(json)
+      end
+    end
   end
 
   def delete_entities(space, doomed)
@@ -155,6 +156,13 @@ class ClientEngine
   end
 
   def sync_registry(server_registry, at_tick)
+
+
+    # Temporarily disabled...
+    return
+
+
+
     space = space_at(at_tick)
     @earliest_tick.upto(at_tick - 1) do |old_tick|
       @spaces.delete old_tick
@@ -173,7 +181,7 @@ class ClientEngine
         clazz = json['class']
         puts "Don't have #{clazz} #{registry_id}, adding it"
         method_in_class = (clazz == 'Player') ? Player : Entity
-        space << method_in_class.from_json(space, json)
+        space << method_in_class.from_json(json)
       end
 
       my_keys.delete registry_id
