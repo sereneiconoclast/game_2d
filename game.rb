@@ -19,21 +19,12 @@ DEFAULT_PORT = 4321
 DEFAULT_STORAGE = '.cnstruxn'
 MAX_CLIENTS = 32
 
-# How many cycles between broadcasts of the registry
-REGISTRY_BROADCAST_EVERY=60 / 4 # Four times a second
+# By default, Gosu calls update() 60 times per second.
+# We aim to match that.
+TICKS_PER_SECOND = 60
 
-class Fixnum
-  def times_profiled
-    sum = 0.0
-    times do |n|
-      before = Time.now.to_f
-      yield n
-      after = Time.now.to_f
-      sum += (after - before)
-    end
-    sum / self
-  end
-end
+# How many ticks between broadcasts of the registry
+REGISTRY_BROADCAST_EVERY=TICKS_PER_SECOND / 4
 
 class Game
   def initialize(
@@ -150,57 +141,46 @@ class Game
   end
 
   def run
-    # We'll update this every second.  Needs to exist before we create the proc
-    cycle_start = Time.now.to_r
-
-    main_block = proc do |n|
-      if actions = @player_actions.delete(@tick)
-        actions.each do |player_id, action|
-          player = @space[player_id]
-          unless player
-            $stderr.puts "No such player #{player_id} -- dropping move"
-            next
-          end
-          if (move = action['move'])
-            player.add_move move
-          elsif (npc = action['create_npc'])
-            create_npc npc
-          else
-            $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
+    run_start = Time.now.to_r
+    loop do
+      TICKS_PER_SECOND.times do |n|
+        if actions = @player_actions.delete(@tick)
+          actions.each do |player_id, action|
+            player = @space[player_id]
+            unless player
+              $stderr.puts "No such player #{player_id} -- dropping move"
+              next
+            end
+            if (move = action['move'])
+              player.add_move move
+            elsif (npc = action['create_npc'])
+              create_npc npc
+            else
+              $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
+            end
           end
         end
-      end
 
-      @space.update
-      @port.update
+        @space.update
+        @port.update
 
-      @port.broadcast(:registry => @space.registry, :at_tick => @tick) if
-        (@tick % REGISTRY_BROADCAST_EVERY == 0)
+        @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
+          (@tick % REGISTRY_BROADCAST_EVERY == 0)
 
-      if @self_check
-        @space.check_for_grid_corruption
-        @space.check_for_registry_leaks
-      end
+        if @self_check
+          @space.check_for_grid_corruption
+          @space.check_for_registry_leaks
+        end
 
-      @tick += 1
+        @tick += 1
 
-      unless @profile
-        # This results in almost exactly 60 updates per second
-        @port.update_until(cycle_start + Rational((n + 1), 60))
-      end
-    end # main_block
+        # This results in something approaching TICKS_PER_SECOND
+        @port.update_until(run_start + Rational((@tick + 1), TICKS_PER_SECOND))
 
-    loop do
-      cycle_start = Time.now.to_r
-      if @profile
-        avg = 60.times_profiled(&main_block)
-        puts "Average time for run(): #{avg}"
-        @port.update_until(cycle_start + 1)
-      else
-        60.times(&main_block)
-      end
+        $stderr.puts "Updates per second: #{@tick / (Time.now.to_r - run_start)}" if @profile
+      end # times
     end # infinite loop
-  end
+  end # run
 
 end
 
@@ -213,7 +193,10 @@ opts = Trollop::options do
   opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
   opt :self_check, "Run data consistency checks", :type => :boolean
   opt :profile, "Turn on profiling", :type => :boolean
+  opt :debug_traffic, "Debug network traffic", :type => :boolean
 end
+
+$debug_traffic = opts[:debug_traffic] || false
 
 game = Game.new(
   opts[:port], opts[:max_clients],

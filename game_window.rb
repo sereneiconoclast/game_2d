@@ -30,8 +30,11 @@ class GameWindow < Gosu::Window
   attr_reader :animation, :font
   attr_accessor :player_id
 
-  def initialize(player_name, hostname, port=DEFAULT_PORT)
+  def initialize(player_name, hostname, port=DEFAULT_PORT, profile=false)
     $server = false
+    @conn_update_total = @engine_update_total = 0.0
+    @conn_update_count = @engine_update_count = 0
+    @profile = profile
 
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
     self.caption = "Ruby Gosu Game"
@@ -86,18 +89,9 @@ class GameWindow < Gosu::Window
     # We will create our player object only after we've been accepted by the server
     # and told our starting position
     @conn = ClientConnection.new(hostname, port, self, player_name)
-
-    @last_update = Time.now.to_r
-  end
-
-  def establish_world(world, at_tick)
-    space = GameSpace.new.establish_world(
-      world['cell_width'], world['cell_height'])
-    # No action for fire_object_not_found
-    # We may remove an object during a registry update that we were about to doom
-
-    @engine = ClientEngine.new(self, space, at_tick)
-    @conn.engine = @engine
+    @engine = @conn.engine = ClientEngine.new(self)
+    @run_start = Time.now.to_f
+    @update_count = 0
   end
 
   def space
@@ -113,26 +107,31 @@ class GameWindow < Gosu::Window
   end
 
   def update
-    # Gosu calls update() every 16 ms.  This results in about 62 updates per second.
-    # We need to get this as close to 60 updates per second as possible.
-    # Otherwise the client will run ahead of the server, sending too many
-    # commands, which queue up on the server side and cause the two to fall badly
-    # out of sync.
-    sleeping = (@last_update + Rational(1, 60)) - Time.now.to_r
-    sleep(sleeping) if sleeping > 0.0
-
-    # Record the time -after- the sleep
-    @last_update = Time.now.to_r
+    @update_count += 1
 
     # Handle any pending ENet events
+    before_t = Time.now.to_f
     @conn.update(0) # non-blocking
+    if @profile
+      @conn_update_total += (Time.now.to_f - before_t)
+      @conn_update_count += 1
+      $stderr.puts "@conn.update() averages #{@conn_update_total / @conn_update_count} seconds each" if (@conn_update_count % 60) == 0
+    end
     return unless @conn.online? && @engine
 
+    before_t = Time.now.to_f
     @engine.update
+    if @profile
+      @engine_update_total += (Time.now.to_f - before_t)
+      @engine_update_count += 1
+      $stderr.puts "@engine.update() averages #{@engine_update_total / @engine_update_count} seconds" if (@engine_update_count % 60) == 0
+    end
 
     # Player at the keyboard queues up a command
     # @pressed_buttons is emptied by handle_input
     handle_input if @player_id
+
+    $stderr.puts "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile
   end
 
   def draw
@@ -280,7 +279,11 @@ opts = Trollop::options do
   opt :name, "Player name", :type => :string, :required => true
   opt :hostname, "Hostname of server", :type => :string, :required => true
   opt :port, "Port number", :default => DEFAULT_PORT
+  opt :profile, "Turn on profiling", :type => :boolean
+  opt :debug_traffic, "Debug network traffic", :type => :boolean
 end
 
-window = GameWindow.new( opts[:name], opts[:hostname], opts[:port] )
+$debug_traffic = opts[:debug_traffic] || false
+
+window = GameWindow.new( opts[:name], opts[:hostname], opts[:port], opts[:profile] )
 window.show

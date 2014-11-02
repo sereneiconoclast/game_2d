@@ -21,14 +21,28 @@ require 'game_space'
 # past the new update must now be recalculated, applying again
 # whatever pending player actions we have heard about.
 class ClientEngine
+  # If we haven't received a full update from the server in this
+  # many ticks, stop guessing.  We're almost certainly wrong by
+  # this point.
+  MAX_LEAD_TICKS = 60
+
   attr_reader :tick
 
-  def initialize(game_window, space, tick)
-    @game_window = game_window
-    @spaces = {tick => space}
-    @earliest_tick = @tick = tick
-
+  def initialize(game_window)
+    @game_window, @width, @height = game_window, 0, 0
+    @spaces = {}
     @deltas = Hash.new {|h,tick| h[tick] = Array.new}
+    @earliest_tick = @tick = nil
+  end
+
+  def establish_world(world, at_tick)
+    @width, @height = world['cell_width'], world['cell_height']
+    create_initial_space(at_tick)
+  end
+
+  def create_initial_space(at_tick)
+    @earliest_tick = @tick = at_tick
+    @spaces[@tick] = GameSpace.new.establish_world(@width, @height)
   end
 
   def space_at(tick)
@@ -45,6 +59,12 @@ class ClientEngine
   end
 
   def update
+    return unless @tick # handshake not yet answered
+
+    if @tick - @earliest_tick >= MAX_LEAD_TICKS
+      $stderr.puts "Lost connection?  Running ahead of server?"
+      return space_at(@tick)
+    end
     space_at(@tick += 1)
   end
 
@@ -123,20 +143,30 @@ class ClientEngine
     npcs.each {|json| space << Entity.from_json(json) }
   end
 
+  def add_entity(space, json)
+    clazz = json['class']
+    method_in_class = (clazz == 'Player') ? Player : Entity
+    space << method_in_class.from_json(json)
+  end
+
+  # Returns the set of registry IDs updated or added
   def update_entities(space, updated)
+    registry_ids = Set.new
     registry = space.registry
     updated.each do |json|
       registry_id = json['registry_id']
       fail "Can't update #{entity.inspect}, no registry_id!" unless registry_id
+      registry_ids << registry_id
+
       if my_obj = registry[registry_id]
         my_obj.update_from_json(json)
       else
-        clazz = json['class']
-        puts "Don't have #{clazz} #{registry_id}, adding it"
-        method_in_class = (clazz == 'Player') ? Player : Entity
-        space << method_in_class.from_json(json)
+        puts "Don't have #{json['class']} #{registry_id}, adding it"
+        add_entity(space, json)
       end
     end
+
+    registry_ids
   end
 
   def delete_entities(space, doomed)
@@ -156,38 +186,27 @@ class ClientEngine
   end
 
   def sync_registry(server_registry, at_tick)
+    # Any older deltas are now irrelevant
+    @earliest_tick.upto(at_tick - 1) {|old_tick| @deltas.delete old_tick}
 
+    # If the server is ahead of us, catch up by, effectively, starting over
+    if at_tick > @tick
+      $stderr.puts "Server is ahead of us -- dropping #{at_tick - @tick} frames"
+      @spaces.clear
+      update_entities(create_initial_space(at_tick), server_registry)
+      return
+    end
 
-    # Temporarily disabled...
-    return
-
-
+    # No longer need any earlier spaces
+    @earliest_tick.upto(at_tick - 1) {|old_tick| @spaces.delete old_tick}
+    @earliest_tick = at_tick
 
     space = space_at(at_tick)
-    @earliest_tick.upto(at_tick - 1) do |old_tick|
-      @spaces.delete old_tick
-      @deltas.delete old_tick
-    end
-    @earliest_tick = [at_tick, @earliest_tick].max
-    @tick = [at_tick, @tick].max
 
-    registry = space.registry
-    my_keys = registry.keys.to_set
+    my_keys = space.registry.keys.to_set
+    server_keys = update_entities(space, server_registry)
 
-    server_registry.each do |registry_id, json|
-      if my_obj = registry[registry_id]
-        my_obj.update_from_json(json)
-      else
-        clazz = json['class']
-        puts "Don't have #{clazz} #{registry_id}, adding it"
-        method_in_class = (clazz == 'Player') ? Player : Entity
-        space << method_in_class.from_json(json)
-      end
-
-      my_keys.delete registry_id
-    end
-
-    my_keys.each do |registry_id|
+    (my_keys - server_keys).each do |registry_id|
       puts "Server doesn't have #{registry_id}, deleting it"
       space.doom space[registry_id]
     end

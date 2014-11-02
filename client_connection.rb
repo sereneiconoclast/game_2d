@@ -47,7 +47,7 @@ class ClientConnection < ENet::Connection
 
     world = hash['world']
     if world
-      @game.establish_world(world, at_tick)
+      @engine.establish_world(world, at_tick)
     end
 
     delta_keys = %w(
@@ -63,7 +63,6 @@ class ClientConnection < ENet::Connection
 
       @engine.create_local_player you_are
     end
-
 
     registry = hash['registry']
     @engine.sync_registry(registry, at_tick) if registry
@@ -94,6 +93,7 @@ class ClientConnection < ENet::Connection
   end
 
   def debug_packet(direction, hash)
+    return unless $debug_traffic
     at_tick = hash['at_tick'] || hash[:at_tick] || 'NO TICK'
     keys = hash.keys - ['at_tick', :at_tick]
     puts "#{direction} #{keys.join(', ')} <#{at_tick}>"

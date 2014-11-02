@@ -83,10 +83,6 @@ class ServerConnection
     end
   end
 
-  def send_registry(registry)
-    send_record :registry => registry, :at_tick => @game.tick
-  end
-
   def send_record(hash, reliable=false, channel=0)
     debug_packet('Sending', hash)
     send_str = hash.to_json
@@ -96,6 +92,7 @@ class ServerConnection
   end
 
   def debug_packet(direction, hash)
+    return unless $debug_traffic
     at_tick = hash['at_tick'] || 'NO TICK'
     keys = hash.keys - ['at_tick']
     puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
