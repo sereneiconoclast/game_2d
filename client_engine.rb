@@ -24,7 +24,7 @@ class ClientEngine
   # If we haven't received a full update from the server in this
   # many ticks, stop guessing.  We're almost certainly wrong by
   # this point.
-  MAX_LEAD_TICKS = 60
+  MAX_LEAD_TICKS = 30
 
   attr_reader :tick
 
@@ -88,6 +88,8 @@ class ClientEngine
         $stderr.puts "Discarding it - we've received registry sync at <#{@earliest_tick}>"
         return
       end
+      # Invalidate old spaces that were generated without this information
+      at_tick.upto(@tick) {|old_tick| @spaces.delete old_tick}
     end
     @deltas[at_tick] << delta
   end
@@ -185,30 +187,13 @@ class ClientEngine
     player.score = score
   end
 
+  # Discard anything we think we know, in favor of the registry
+  # we just got from the server
   def sync_registry(server_registry, at_tick)
+    $stderr.puts "Erasing history for #{@tick - at_tick} ticks"
+    @spaces.clear
     # Any older deltas are now irrelevant
     @earliest_tick.upto(at_tick - 1) {|old_tick| @deltas.delete old_tick}
-
-    # If the server is ahead of us, catch up by, effectively, starting over
-    if at_tick > @tick
-      $stderr.puts "Server is ahead of us -- dropping #{at_tick - @tick} frames"
-      @spaces.clear
-      update_entities(create_initial_space(at_tick), server_registry)
-      return
-    end
-
-    # No longer need any earlier spaces
-    @earliest_tick.upto(at_tick - 1) {|old_tick| @spaces.delete old_tick}
-    @earliest_tick = at_tick
-
-    space = space_at(at_tick)
-
-    my_keys = space.registry.keys.to_set
-    server_keys = update_entities(space, server_registry)
-
-    (my_keys - server_keys).each do |registry_id|
-      puts "Server doesn't have #{registry_id}, deleting it"
-      space.doom space[registry_id]
-    end
+    update_entities(create_initial_space(at_tick), server_registry)
   end
 end
