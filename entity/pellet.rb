@@ -11,8 +11,8 @@ class Pellet < OwnedEntity
   # pellets fired by the same player
   def transparent_to_me?(other)
     super ||
-    other == self.owner ||
-    ((other.is_a?(Pellet) || other.is_a?(Block)) && other.owner == self.owner)
+    other.registry_id == self.owner_id ||
+    ((other.is_a?(Pellet) || other.is_a?(Block)) && other.owner_id == self.owner_id)
   end
 
   def i_hit(others)

@@ -19,7 +19,7 @@ class Player < Entity
   # Amount to decelerate each tick when braking
   BRAKE_SPEED = 4
 
-  attr_accessor :player_name, :score, :build_block
+  attr_accessor :player_name, :score, :build_block_id
 
   def initialize(player_name)
     super(0, 0)
@@ -28,7 +28,7 @@ class Player < Entity
     @moves = []
     @current_move = nil
     @falling = false
-    @build_block = nil
+    @build_block_id = nil
     @build_level = 0
     @move_fiber = nil
   end
@@ -44,16 +44,22 @@ class Player < Entity
 
   def falling?; @falling; end
 
-  def building?; @build_block; end
+  def building?; @build_block_id; end
+
+  def build_block
+    return nil unless building?
+    fail "Can't look up build_block when not in a space" unless @space
+    @space[@build_block_id]
+  end
 
   def destroy!
-    @build_block.owner = nil if @build_block
+    build_block.owner_id = nil if building?
   end
 
   # Pellets don't hit the originating player
   def transparent_to_me?(other)
     super ||
-    (other == @build_block) ||
+    (other == build_block) ||
     (other.is_a?(Pellet) && other.owner == self)
   end
 
@@ -124,8 +130,8 @@ class Player < Entity
     end
 
     # Now see if we've moved off of a block we were building
-    if @build_block && !@space.entities_overlapping(@x, @y).include?(@build_block)
-      @build_block.owner = nil
+    if building? && !@space.entities_overlapping(@x, @y).include?(build_block)
+      build_block.owner_id = nil
       disown_block
     end
   end
@@ -171,48 +177,47 @@ class Player < Entity
   # Called server-side to create the actual block
   def build
     return unless $server
-    if @build_block
+    if building?
       @build_level += 1
       if @build_level >= BUILD_TIME
         @build_level = 0
-        @build_block.hp += 1
-        @space.game.send_updated_entity @build_block
+        build_block.hp += 1
+        @space.game.send_updated_entity build_block
       end
     else
-      self.build_block = Entity::Block.new(@x, @y).tap do |bb|
-        bb.owner = self
-        bb.hp = 1
-        bb.generate_id
-      end
-      @space.game.add_npc @build_block
+      bb = Entity::Block.new(@x, @y)
+      bb.owner_id = registry_id
+      bb.hp = 1
+      @build_block_id = bb.generate_id
+      @space.game.add_npc bb
       @build_level = 0
     end
   end
 
-  def disown_block; $stderr.puts "#{self} disowning #{@build_block}"; @build_block, @build_level = nil, 0; end
+  def disown_block; $stderr.puts "#{self} disowning #{build_block}"; @build_block_id, @build_level = nil, 0; end
 
   def rise_up
     @move_fiber = make_rise_up_fiber
   end
 
   # Fiber for executing a multi-tick "rise up" maneuver
-  # 1) If not already at center of @build_block, move there @ 1 pixel/tick
+  # 1) If not already at center of build_block, move there @ 1 pixel/tick
   # 2) Rise exactly 1 cell @ 1 pixel/tick
   #
   # If step #2 is interrupted by an obstruction, repeat step #1 and stop
-  # If at any point the @build_block is destroyed, simply abort
+  # If at any point the build_block is destroyed, simply abort
   #
   # Fiber returns true if it has more work to do, nil if it's finished
   #
   # Caller is responsible for zeroing velocity afterward
   def make_rise_up_fiber
-    blok = @build_block
+    blok = build_block
     start_x, start_y = blok.x, blok.y
     l = lambda do
       # step 1
       while x != start_x || y != start_y
         # abort if build_block destroyed
-        return unless blok == @build_block
+        return unless blok == build_block
 
         self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
         self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
@@ -223,7 +228,7 @@ class Player < Entity
       self.x_vel, self.y_vel = angle_to_vector(self.a, PIXEL_WIDTH)
       CELL_WIDTH_IN_PIXELS.times do
         # abort if build_block destroyed
-        return unless blok == @build_block
+        return unless blok == build_block
 
         move || break # move failed somehow, go to step 3
         Fiber.yield true
@@ -232,7 +237,7 @@ class Player < Entity
       # Step 2 failed.  Step 3: Repeat step 1
       while x != start_x || y != start_y
         # abort if build_block destroyed
-        return unless blok == @build_block
+        return unless blok == build_block
 
         self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
         self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
@@ -260,25 +265,27 @@ class Player < Entity
     self.player_name <=> other.player_name
   end
 
-  def ==(other)
-    self.equal? other
-  end
-
   def to_s
     "#{player_name} (#{registry_id}) at #{x}x#{y}"
+  end
+
+  def all_state
+    super + [player_name, score, build_block.nullsafe_registry_id]
   end
 
   def as_json
     super().merge(
       :class => 'Player',
       :player_name => player_name,
-      :score => score
+      :score => score,
+      :build_block => @build_block_id,
     )
   end
 
   def update_from_json(json)
     @player_name = json['player_name']
     @score = json['score']
+    @build_block_id = json['build_block']
     super
   end
 

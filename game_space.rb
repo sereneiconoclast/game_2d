@@ -14,17 +14,26 @@ require 'player'
 # Cell is a portion of the game space, the exact size of one entity.
 # The cell (0,0) contains subpixel coordinates (0,0) through (399,399).
 #
-# The behavior I want from sets-of-cells is to consider them all unique objects.
+# The behavior I want from Cells is to consider them all unique objects.
 # I want to be able to say "Subtract this set of cells from that set".  Treating
-# Sets as equal if their contents are equal defeats this purpose.
+# Cells as equal if their contents are equal defeats this purpose.
 #
 # It's also handy if each Cell knows where it lives in the grid.
+#
+# Previously, I was using Set as the superclass.  That seemed to make sense,
+# since this is an unordered collection.  But Set stores everything as hash
+# keys, and hashes get very confused if their keys get mutated without going
+# through the API.
 
-class Cell < Set
+class Cell < Array
   attr_reader :x, :y
 
-  def ==(other); object_id == other.object_id; end
-  def eql?(other); object_id == other.object_id; end
+  def ==(other)
+    other.class.equal?(self.class) &&
+      other.x == self.x &&
+      other.y == self.y &&
+      super
+  end
 
   def initialize(cell_x, cell_y)
     super()
@@ -227,7 +236,7 @@ class GameSpace
   # Remove the entity from the grid
   def remove_entity_from_grid(entity)
     cells_overlapping(entity.x, entity.y).each do |s|
-      raise "#{entity} not where expected" unless s.delete? entity
+      raise "#{entity} not where expected" unless s.delete entity
     end
   end
 
@@ -236,8 +245,10 @@ class GameSpace
     cells_before = cells_overlapping(old_x, old_y)
     cells_after = cells_overlapping(entity.x, entity.y)
 
+    cells_before.each {|cell| binding.pry unless cell.include? entity}
+
     (cells_before - cells_after).each do |s|
-      raise "#{entity} not where expected" unless s.delete? entity
+      raise "#{entity} not where expected" unless s.delete entity
     end
     (cells_after - cells_before).each {|s| s << entity }
   end
@@ -388,5 +399,11 @@ class GameSpace
 
 #   puts "Camera at #{camera_x}x#{camera_y}"
     [ camera_x, camera_y ]
+  end
+
+  def ==(other)
+    other.class.equal?(self.class) &&
+      @grid == other.instance_variable_get(:@grid) &&
+      self.registry == other.registry
   end
 end

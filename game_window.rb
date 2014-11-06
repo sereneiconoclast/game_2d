@@ -19,11 +19,6 @@ SCREEN_HEIGHT = 480 # in pixels
 
 DEFAULT_PORT = 4321
 
-# We tell the server to execute all actions this many ticks
-# in the future, to give the message time to propagate around
-# the fleet
-ACTION_DELAY = 6 # 1/10 of a second
-
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
@@ -98,10 +93,6 @@ class GameWindow < Gosu::Window
     @engine.space
   end
 
-  def send_actions_at
-    @engine.tick + ACTION_DELAY
-  end
-
   def player
     space[@player_id]
   end
@@ -111,7 +102,7 @@ class GameWindow < Gosu::Window
 
     # Handle any pending ENet events
     before_t = Time.now.to_f
-    @conn.update(0) # non-blocking
+    @conn.update
     if @profile
       @conn_update_total += (Time.now.to_f - before_t)
       @conn_update_count += 1
@@ -183,7 +174,7 @@ class GameWindow < Gosu::Window
     x, y = mouse_coords
     x_vel = (x - (player.x + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
     y_vel = (y - (player.y + Entity::WIDTH / 2)) / Entity::PIXEL_WIDTH
-    @conn.send_move send_actions_at, :fire, :x_vel => x_vel, :y_vel => y_vel
+    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -210,7 +201,6 @@ class GameWindow < Gosu::Window
     end
 
     @conn.send_create_npc(
-      send_actions_at,
       :class => @local[:create_npc][:type],
       :position => [x, y],
       :velocity => [0, 0],
@@ -220,7 +210,7 @@ class GameWindow < Gosu::Window
   end
 
   def shutdown
-    @conn.disconnect(200)
+    @conn.disconnect
     close
   end
 
@@ -228,7 +218,7 @@ class GameWindow < Gosu::Window
   def handle_input
     return if player.falling?
     move = move_for_keypress
-    @conn.send_move send_actions_at, move
+    @conn.send_move move
     player.add_move move
   end
 
@@ -271,19 +261,21 @@ class GameWindow < Gosu::Window
   end
 
   def send_build
-    @conn.send_move send_actions_at, :build
+    @conn.send_move :build
   end
 end
 
-opts = Trollop::options do
-  opt :name, "Player name", :type => :string, :required => true
-  opt :hostname, "Hostname of server", :type => :string, :required => true
-  opt :port, "Port number", :default => DEFAULT_PORT
-  opt :profile, "Turn on profiling", :type => :boolean
-  opt :debug_traffic, "Debug network traffic", :type => :boolean
+if $PROGRAM_NAME == __FILE__
+  opts = Trollop::options do
+    opt :name, "Player name", :type => :string, :required => true
+    opt :hostname, "Hostname of server", :type => :string, :required => true
+    opt :port, "Port number", :default => DEFAULT_PORT
+    opt :profile, "Turn on profiling", :type => :boolean
+    opt :debug_traffic, "Debug network traffic", :type => :boolean
+  end
+
+  $debug_traffic = opts[:debug_traffic] || false
+
+  window = GameWindow.new( opts[:name], opts[:hostname], opts[:port], opts[:profile] )
+  window.show
 end
-
-$debug_traffic = opts[:debug_traffic] || false
-
-window = GameWindow.new( opts[:name], opts[:hostname], opts[:port], opts[:profile] )
-window.show

@@ -407,7 +407,14 @@ class Entity
   def to_s
     "#{self.class} (#{registry_id_safe}) at #{x}x#{y}"
   end
+
   def ==(other)
-    self.equal? other
+    other.class.equal?(self.class) && other.all_state == self.all_state
   end
+  def all_state
+    [registry_id_safe, @x, @y, @a, @x_vel, @y_vel, @moving]
+  end
+
+  def hash; self.class.hash ^ all_state.hash; end
+  def eql?(other); self == other; end
 end

@@ -48,8 +48,8 @@ class Block < OwnedEntity
 
   def transparent_to_me?(other)
     super ||
-    (other == owner) ||
-    (other.is_a?(Pellet) && other.owner == self)
+    (other.registry_id == owner_id) ||
+    (other.is_a?(Pellet) && other.owner_id == owner_id)
   end
 
   def harmed_by(other)

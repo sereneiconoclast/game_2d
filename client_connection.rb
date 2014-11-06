@@ -4,21 +4,30 @@ require 'json'
 # The client creates one of these.
 # It is then used for all communication with the server.
 
-class ClientConnection < ENet::Connection
+class ClientConnection
   attr_reader :player_name
   attr_accessor :engine
 
+  # We tell the server to execute all actions this many ticks
+  # in the future, to give the message time to propagate around
+  # the fleet
+  ACTION_DELAY = 6 # 1/10 of a second
+
   def initialize(host, port, game, player_name, timeout=2000)
     # remote host address, remote host port, channels, download bandwidth, upload bandwidth
-    super(host, port, 2, 0, 0)
+    @socket = _create_connection(host, port, 2, 0, 0)
     @game = game
     @player_name = player_name
 
-    on_connection(method(:on_connect))
-    on_disconnection(method(:on_close))
-    on_packet_receive(method(:on_packet))
+    @socket.on_connection(method(:on_connect))
+    @socket.on_disconnection(method(:on_close))
+    @socket.on_packet_receive(method(:on_packet))
 
-    connect(timeout)
+    @socket.connect(timeout)
+  end
+
+  def _create_connection(*args)
+    ENet::Connection.new(*args)
   end
 
   def on_connect
@@ -68,14 +77,18 @@ class ClientConnection < ENet::Connection
     @engine.sync_registry(registry, at_tick) if registry
   end
 
-  def send_move(at_tick, move, args={})
-    return unless move
-    args[:move] = move.to_s
-    send_record :at_tick => at_tick, :move => args
+  def send_actions_at
+    @engine.tick + ACTION_DELAY
   end
 
-  def send_create_npc(at_tick, npc)
-    send_record(:at_tick => at_tick, :create_npc => npc)
+  def send_move(move, args={})
+    return unless move
+    args[:move] = move.to_s
+    send_record :at_tick => send_actions_at, :move => args
+  end
+
+  def send_create_npc(npc)
+    send_record(:at_tick => send_actions_at, :create_npc => npc)
   end
 
   def send_save
@@ -88,8 +101,8 @@ class ClientConnection < ENet::Connection
 
   def send_record(data, reliable=false)
     debug_packet('Sending', data)
-    send_packet(data.to_json, reliable, 0)
-    flush
+    @socket.send_packet(data.to_json, reliable, 0)
+    @socket.flush
   end
 
   def debug_packet(direction, hash)
@@ -98,4 +111,11 @@ class ClientConnection < ENet::Connection
     keys = hash.keys - ['at_tick', :at_tick]
     puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
   end
+
+  def update
+    @socket.update(0) # non-blocking
+  end
+
+  def online?; @socket.online?; end
+  def disconnect; @socket.disconnect(200); end
 end

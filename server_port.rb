@@ -5,7 +5,7 @@ require 'server_connection'
 class ServerPort
   def initialize(game, port_number, max_clients)
     @game = game
-    @server = ENet::Server.new port_number, max_clients, 2, 0, 0
+    @server = _create_enet_server port_number, max_clients, 2, 0, 0
     puts "ENet server listening on #{port_number}"
 
     @clients = {}
@@ -14,6 +14,10 @@ class ServerPort
     @server.on_connection method(:on_connection)
     @server.on_packet_receive method(:on_packet_receive)
     @server.on_disconnection method(:on_disconnection)
+  end
+
+  def _create_enet_server(*args)
+    ENet::Server.new *args
   end
 
   def on_connection(id, ip)

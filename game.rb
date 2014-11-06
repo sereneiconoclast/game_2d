@@ -63,7 +63,11 @@ class Game
       raise "Object #{entity} not in registry"
     end
 
-    @port = ServerPort.new(self, port_number, max_clients)
+    @port = _create_server_port(self, port_number, max_clients)
+  end
+
+  def _create_server_port(*args)
+    ServerPort.new *args
   end
 
   attr_reader :tick
@@ -140,42 +144,48 @@ class Game
     @player_actions[at_tick] << [player_id, action]
   end
 
+  def process_player_actions
+    if actions = @player_actions.delete(@tick)
+      actions.each do |player_id, action|
+        player = @space[player_id]
+        unless player
+          $stderr.puts "No such player #{player_id} -- dropping move"
+          next
+        end
+        if (move = action['move'])
+          player.add_move move
+        elsif (npc = action['create_npc'])
+          create_npc npc
+        else
+          $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
+        end
+      end
+    end
+  end
+
+  def update
+    @port.update
+    process_player_actions
+    @space.update
+
+    @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
+      (@tick % REGISTRY_BROADCAST_EVERY == 0)
+
+    if @self_check
+      @space.check_for_grid_corruption
+      @space.check_for_registry_leaks
+    end
+  end
+
   def run
     run_start = Time.now.to_r
     loop do
       TICKS_PER_SECOND.times do |n|
-        if actions = @player_actions.delete(@tick)
-          actions.each do |player_id, action|
-            player = @space[player_id]
-            unless player
-              $stderr.puts "No such player #{player_id} -- dropping move"
-              next
-            end
-            if (move = action['move'])
-              player.add_move move
-            elsif (npc = action['create_npc'])
-              create_npc npc
-            else
-              $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
-            end
-          end
-        end
-
-        @space.update
-        @port.update
-
-        @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
-          (@tick % REGISTRY_BROADCAST_EVERY == 0)
-
-        if @self_check
-          @space.check_for_grid_corruption
-          @space.check_for_registry_leaks
-        end
-
+        update
         @tick += 1
 
         # This results in something approaching TICKS_PER_SECOND
-        @port.update_until(run_start + Rational((@tick + 1), TICKS_PER_SECOND))
+        @port.update_until(run_start + Rational(@tick, TICKS_PER_SECOND))
 
         $stderr.puts "Updates per second: #{@tick / (Time.now.to_r - run_start)}" if @profile
       end # times
@@ -184,23 +194,25 @@ class Game
 
 end
 
-opts = Trollop::options do
-  opt :level, "Level name", :type => :string, :required => true
-  opt :width, "Level width", :default => WORLD_WIDTH
-  opt :height, "Level height", :default => WORLD_HEIGHT
-  opt :port, "Port number", :default => DEFAULT_PORT
-  opt :storage, "Data storage dir (in home directory)", :default => DEFAULT_STORAGE
-  opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
-  opt :self_check, "Run data consistency checks", :type => :boolean
-  opt :profile, "Turn on profiling", :type => :boolean
-  opt :debug_traffic, "Debug network traffic", :type => :boolean
+if $PROGRAM_NAME == __FILE__
+  opts = Trollop::options do
+    opt :level, "Level name", :type => :string, :required => true
+    opt :width, "Level width", :default => WORLD_WIDTH
+    opt :height, "Level height", :default => WORLD_HEIGHT
+    opt :port, "Port number", :default => DEFAULT_PORT
+    opt :storage, "Data storage dir (in home directory)", :default => DEFAULT_STORAGE
+    opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
+    opt :self_check, "Run data consistency checks", :type => :boolean
+    opt :profile, "Turn on profiling", :type => :boolean
+    opt :debug_traffic, "Debug network traffic", :type => :boolean
+  end
+
+  $debug_traffic = opts[:debug_traffic] || false
+
+  game = Game.new(
+    opts[:port], opts[:max_clients],
+    opts[:storage], opts[:level], opts[:width], opts[:height],
+    opts[:self_check], opts[:profile])
+
+  game.run
 end
-
-$debug_traffic = opts[:debug_traffic] || false
-
-game = Game.new(
-  opts[:port], opts[:max_clients],
-  opts[:storage], opts[:level], opts[:width], opts[:height],
-  opts[:self_check], opts[:profile])
-
-game.run

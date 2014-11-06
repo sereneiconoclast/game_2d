@@ -12,7 +12,10 @@ class Wall < Entity
   def sleep_now?; true; end
   def wake!; end
 
+  def registry_id; "Wall[#{left_cell_x}x#{top_cell_y}]"; end
   def to_s
     "Wall at #{left_cell_x}x#{top_cell_y} (#{x}x#{y})"
   end
+
+  def all_state; [x, y]; end
 end
