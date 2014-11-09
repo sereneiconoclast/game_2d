@@ -24,21 +24,19 @@ MAX_CLIENTS = 32
 TICKS_PER_SECOND = 60
 
 # How many ticks between broadcasts of the registry
-REGISTRY_BROADCAST_EVERY=TICKS_PER_SECOND / 4
+DEFAULT_REGISTRY_BROADCAST_EVERY = TICKS_PER_SECOND / 4
 
 class Game
-  def initialize(
-    port_number, max_clients, storage,
-    level, cell_width, cell_height,
-    self_check, profile
-  )
+  def initialize(args)
     $server = true
 
-    @storage = Storage.in_home_dir(storage).dir('server')
-    level_storage = @storage[level]
+    @storage = Storage.in_home_dir(args[:storage] || DEFAULT_STORAGE).dir('server')
+    level_storage = @storage[args[:level]]
 
     if level_storage.empty?
-      @space = GameSpace.new(self).establish_world(cell_width, cell_height)
+      @space = GameSpace.new(self).establish_world(
+        args[:width] || WORLD_WIDTH,
+        args[:height] || WORLD_HEIGHT)
       @space.storage = level_storage
     else
       @space = GameSpace.load(self, level_storage)
@@ -47,7 +45,9 @@ class Game
     @tick = 0
     @player_actions = Hash.new {|h,tick| h[tick] = Array.new}
 
-    @self_check, @profile = self_check, profile
+    @self_check, @profile, @registry_broadcast_every = args.values_at(
+    :self_check, :profile, :registry_broadcast_every)
+    @registry_broadcast_every ||= DEFAULT_REGISTRY_BROADCAST_EVERY
 
     # This should never happen.  It can only happen client-side because a
     # registry update may create an entity before we get around to it in,
@@ -63,7 +63,9 @@ class Game
       raise "Object #{entity} not in registry"
     end
 
-    @port = _create_server_port(self, port_number, max_clients)
+    @port = _create_server_port(self,
+      args[:port] || DEFAULT_PORT,
+      args[:max_clients] || MAX_CLIENTS)
   end
 
   def _create_server_port(*args)
@@ -169,7 +171,7 @@ class Game
     @space.update
 
     @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
-      (@tick % REGISTRY_BROADCAST_EVERY == 0)
+      @registry_broadcast_every > 0 && (@tick % @registry_broadcast_every == 0)
 
     if @self_check
       @space.check_for_grid_corruption
@@ -197,22 +199,18 @@ end
 if $PROGRAM_NAME == __FILE__
   opts = Trollop::options do
     opt :level, "Level name", :type => :string, :required => true
-    opt :width, "Level width", :default => WORLD_WIDTH
-    opt :height, "Level height", :default => WORLD_HEIGHT
-    opt :port, "Port number", :default => DEFAULT_PORT
-    opt :storage, "Data storage dir (in home directory)", :default => DEFAULT_STORAGE
-    opt :max_clients, "Maximum clients", :default => MAX_CLIENTS
+    opt :width, "Level width", :type => :integer
+    opt :height, "Level height", :type => :integer
+    opt :port, "Port number", :type => :integer
+    opt :storage, "Data storage dir (in home directory)", :type => :string
+    opt :max_clients, "Maximum clients", :type => :integer
     opt :self_check, "Run data consistency checks", :type => :boolean
     opt :profile, "Turn on profiling", :type => :boolean
     opt :debug_traffic, "Debug network traffic", :type => :boolean
+    opt :registry_broadcast_every, "Send registry broadcasts every N frames (0 = never)", :type => :integer
   end
 
   $debug_traffic = opts[:debug_traffic] || false
 
-  game = Game.new(
-    opts[:port], opts[:max_clients],
-    opts[:storage], opts[:level], opts[:width], opts[:height],
-    opts[:self_check], opts[:profile])
-
-  game.run
+  Game.new(opts).run
 end

@@ -49,7 +49,7 @@ class Player < Entity
   def build_block
     return nil unless building?
     fail "Can't look up build_block when not in a space" unless @space
-    @space[@build_block_id]
+    @space[@build_block_id] or fail "Don't have build_block #{@build_block_id}"
   end
 
   def destroy!
@@ -270,7 +270,7 @@ class Player < Entity
   end
 
   def all_state
-    super + [player_name, score, build_block.nullsafe_registry_id]
+    super + [player_name, score, build_block_id]
   end
 
   def as_json

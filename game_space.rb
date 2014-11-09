@@ -1,3 +1,4 @@
+require 'delegate'
 require 'set'
 require 'wall'
 require 'player'
@@ -25,21 +26,24 @@ require 'player'
 # keys, and hashes get very confused if their keys get mutated without going
 # through the API.
 
-class Cell < Array
+class Cell < DelegateClass(Array)
   attr_reader :x, :y
 
   def ==(other)
     other.class.equal?(self.class) &&
       other.x == self.x &&
       other.y == self.y &&
-      super
+      other.instance_variable_get(:@a) == @a
   end
 
   def initialize(cell_x, cell_y)
-    super()
+    @a = []
     @x, @y = cell_x, cell_y
+    super(@a)
   end
-  def to_s; "(#{x}, #{y}) [#{to_a.join(', ')}]"; end
+
+  def to_s; "(#{x}, #{y}) [#{@a.join(', ')}]"; end
+  def inspect; "Cell(#{x}, #{y}) #{@a}"; end
 end
 
 
@@ -75,8 +79,8 @@ class GameSpace
     @grid = Array.new(cell_width + 2) do |cx|
       Array.new(cell_height + 2) do |cy|
         Cell.new(cx-1, cy-1)
-      end
-    end
+      end.freeze
+    end.freeze
 
     # Top and bottom, including corners
     (-1 .. cell_width).each do |cell_x|
@@ -138,6 +142,48 @@ class GameSpace
     @registry[registry_id]
   end
 
+  # List of entities by type matching the specified entity
+  def entity_list(entity)
+    case entity
+    when Player then @players
+    else @npcs
+    end
+  end
+
+  # Override to be informed when trying to add an entity that
+  # we already have (registry ID clash)
+  def fire_duplicate_id(old_entity, new_entity); end
+
+  # Returns nil if registration worked, or the exact same object
+  # was already registered
+  # If another object was registered, calls fire_duplicate_id and
+  # then returns the previously-registered object
+  def register(entity)
+    reg_id = entity.registry_id
+    old = @registry[reg_id]
+    return nil if old.equal? entity
+    if old
+      fire_duplicate_id(old, entity)
+      return old
+    end
+    @registry[reg_id] = entity
+    entity_list(entity) << entity
+    nil
+  end
+
+  def registered?(entity)
+    return false unless old = @registry[entity.registry_id]
+    return true if old.equal? entity
+    fail("Registered entity #{old} has ID #{old.object_id}; " +
+      "passed entity #{entity} has ID #{entity.object_id}")
+  end
+
+  def deregister(entity)
+    fail "#{entity} not registered" unless registered?(entity)
+    entity_list(entity).delete entity
+    @registry.delete entity.registry_id
+  end
+
   # We can safely look up cell_x == -1, cell_x == @cell_width, cell_y == -1,
   # and/or cell_y == @cell_height -- any of these returns a Wall instance
   def assert_ok_coords(cell_x, cell_y)
@@ -197,6 +243,7 @@ class GameSpace
   end
 
   # Accepts a collection of (x, y)
+  # Returns a Set of entities
   def entities_at_points(coords)
     coords.collect {|x, y| entities_at_point(x, y) }.flatten.to_set
   end
@@ -222,7 +269,7 @@ class GameSpace
     entities_at_points(corner_points_of_entity(x, y))
   end
 
-  # Retrieve list of cells (sets) that overlap with a theoretical entity
+  # Retrieve list of cells that overlap with a theoretical entity
   # at position [x, y] (in subpixels).
   def cells_overlapping(x, y)
     cells_at_points(corner_points_of_entity(x, y)).collect {|cx, cy| at(cx, cy) }
@@ -245,8 +292,6 @@ class GameSpace
     cells_before = cells_overlapping(old_x, old_y)
     cells_after = cells_overlapping(entity.x, entity.y)
 
-    cells_before.each {|cell| binding.pry unless cell.include? entity}
-
     (cells_before - cells_after).each do |s|
       raise "#{entity} not where expected" unless s.delete entity
     end
@@ -258,7 +303,7 @@ class GameSpace
   #
   # All entity motion should be passed through this method
   def process_moving_entity(entity)
-    unless @registry[entity.registry_id]
+    unless registered?(entity)
       puts "#{entity} not in registry yet, no move to process"
       yield
       return
@@ -281,38 +326,22 @@ class GameSpace
     moved
   end
 
-  # List of entities by type matching the specified entity
-  def entity_list(entity)
-    case entity
-    when Player then @players
-    else @npcs
-    end
-  end
-
-  # Override to be informed when trying to add an entity that
-  # we already have (registry ID clash)
-  def fire_duplicate_id(old_entity, new_entity); end
-
   # Add an entity.  Will wake neighboring entities
   def <<(entity)
-    reg_id = entity.registry_id
-    if old = self[reg_id]
-      fire_duplicate_id(old, entity)
-      old
+    fail "Already registered: #{entity}" if registered?(entity)
+
+    # Need to assign the space before entities_obstructing()
+    entity.space = self
+    conflicts = entity.entities_obstructing(entity.x, entity.y)
+    if conflicts.empty?
+      register(entity)
+      add_entity_to_grid(entity)
+      entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
+      entity
     else
-      entity.space = self
-      conflicts = entity.entities_obstructing(entity.x, entity.y)
-      if conflicts.empty?
-        @registry[reg_id] = entity
-        entity_list(entity) << entity
-        add_entity_to_grid(entity)
-        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
-        entity
-      else
-        entity.space = nil
-        # TODO: Convey error to user somehow
-        $stderr.puts "Can't create #{entity}, occupied by #{conflicts.inspect}"
-      end
+      entity.space = nil
+      # TODO: Convey error to user somehow
+      $stderr.puts "Can't create #{entity}, occupied by #{conflicts.inspect}"
     end
   end
 
@@ -328,15 +357,15 @@ class GameSpace
   # Actually remove all previously-marked entities.  Wakes neighbors
   def purge_doomed_entities
     @doomed.each do |entity|
-      if @registry.delete entity.registry_id
+      if registered?(entity)
+        entity.destroy!
+        deregister(entity)
         entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
         remove_entity_from_grid(entity)
-        entity_list(entity).delete entity
       else
         fire_entity_not_found(entity)
       end
     end
-    @doomed.each(&:destroy!)
     @doomed.clear
   end
 

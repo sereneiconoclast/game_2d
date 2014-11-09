@@ -23,13 +23,8 @@ class OwnedEntity < Entity
     super
   end
 
-  # This is telling me I need a better solution for keeping
-  # the client in sync with the server.  This logic is too
-  # complicated and specific.
   def update_my_owner(new_owner_id)
-    @space[@owner_id].build_block_id = nil if @owner_id
     @owner_id = new_owner_id
-    @space[@owner_id].build_block_id = registry_id if @owner_id
   end
 
   def on_added_to_space

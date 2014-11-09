@@ -140,18 +140,38 @@ describe FakeGame do
   let(:profile) { false }
 
   let(:game) { FakeGame.new(
-    port_number, max_clients, storage,
-    level, cell_width, cell_height,
-    self_check, profile
+    :port                     => port_number,
+    :max_clients              => max_clients,
+    :storage                  => storage,
+    :level                    => level,
+    :cell_width               => cell_width,
+    :cell_height              => cell_height,
+    :self_check               => self_check,
+    :profile                  => profile,
+    :registry_broadcast_every => registry_broadcast_every
   ) }
   let(:window) { game; FakeGameWindow.new(hostname, port_number, player_name) }
 
-  it "is in sync after one update" do
-    window
+  context "with default registry syncs" do
+    let(:registry_broadcast_every) { nil }
+    it "is in sync after one update" do
+      window
 
-    game.update
-    window.update
+      game.update
+      window.update
 
-    expect(game.space).to eq(window.space)
+      expect(game.space).to eq(window.space)
+    end
+  end
+  context "with no registry syncs" do
+    let(:registry_broadcast_every) { 0 }
+    it "is in sync after one update" do
+      window
+
+      game.update
+      window.update
+
+      expect(game.space).to eq(window.space)
+    end
   end
 end
