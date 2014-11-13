@@ -144,8 +144,8 @@ describe FakeGame do
     :max_clients              => max_clients,
     :storage                  => storage,
     :level                    => level,
-    :cell_width               => cell_width,
-    :cell_height              => cell_height,
+    :width                    => cell_width,
+    :height                   => cell_height,
     :self_check               => self_check,
     :profile                  => profile,
     :registry_broadcast_every => registry_broadcast_every
@@ -159,6 +159,39 @@ describe FakeGame do
 
       game.update
       window.update
+
+      expect(game.space).to eq(window.space)
+    end
+    it "is in sync after a bunch of stuff" do
+      window
+
+      expect(game.tick).to eq(-1)
+      expect(window.engine.tick).to be_nil
+
+      30.times do |n|
+        game.update
+        expect(game.tick).to eq(n)
+        window.update
+        expect(window.engine.tick).to eq(n)
+        expect(game.space).to eq(window.space)
+      end
+
+      expect(game.space.players.size).to eq(1)
+      expect(game.space.npcs.size).to eq(0)
+
+      # Command generated at tick 29, scheduled for tick 35
+      window.generate_move :build
+
+      5.times do # ticks 30 - 34
+        game.update; window.update
+        expect(game.space).to eq(window.space)
+        expect(game.space.npcs.size).to eq(0)
+      end
+
+      # tick 35
+      game.update; window.update
+      expect(game.tick).to eq(35)
+      expect(game.space.npcs.size).to eq(1)
 
       expect(game.space).to eq(window.space)
     end

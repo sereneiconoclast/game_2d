@@ -42,7 +42,7 @@ class Game
       @space = GameSpace.load(self, level_storage)
     end
 
-    @tick = 0
+    @tick = -1
     @player_actions = Hash.new {|h,tick| h[tick] = Array.new}
 
     @self_check, @profile, @registry_broadcast_every = args.values_at(
@@ -166,8 +166,20 @@ class Game
   end
 
   def update
+    @tick += 1
+
+    # This will:
+    # 1) Queue up player actions for existing players
+    #    (create_npc included)
+    # 2) Add new players in response to handshake messages
+    # 3) Remove players in response to disconnections
     @port.update
+
+    # This will execute player moves, and create NPCs
     process_player_actions
+
+    # Objects that exist by now will be updated
+    # Objects created during this tick won't be updated this tick
     @space.update
 
     @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
@@ -184,7 +196,6 @@ class Game
     loop do
       TICKS_PER_SECOND.times do |n|
         update
-        @tick += 1
 
         # This results in something approaching TICKS_PER_SECOND
         @port.update_until(run_start + Rational(@tick, TICKS_PER_SECOND))

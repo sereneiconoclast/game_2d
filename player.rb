@@ -261,16 +261,12 @@ class Player < Entity
     @moves << args
   end
 
-  def <=>(other)
-    self.player_name <=> other.player_name
-  end
-
   def to_s
     "#{player_name} (#{registry_id}) at #{x}x#{y}"
   end
 
   def all_state
-    super + [player_name, score, build_block_id]
+    [player_name] + super + [score, build_block_id]
   end
 
   def as_json

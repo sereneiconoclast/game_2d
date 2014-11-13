@@ -53,6 +53,7 @@ class GameWindow < Gosu::Window
     @local = {
       :create_npc => {
         :type => 'Entity::Block',
+        :hp   => 5,
         :snap => false,
       },
     }
@@ -60,13 +61,22 @@ class GameWindow < Gosu::Window
       @local[:create_npc][:snap] ? "Turn snap off" : "Turn snap on"
     end
 
+    object_type_submenus = [
+      ['Dirt',       'Entity::Block',    5],
+      ['Brick',      'Entity::Block',    10],
+      ['Cement',     'Entity::Block',    15],
+      ['Steel',      'Entity::Block',    20],
+      ['Unlikelium', 'Entity::Block',    25],
+      ['Titanium',   'Entity::Titanium', 0]
+    ].collect do |type_name, class_name, hp|
+      MenuItem.new(type_name, self, @font) do |item|
+        @local[:create_npc][:type] = class_name
+        @local[:create_npc][:hp] = hp
+      end
+    end
     object_type_menu = Menu.new('Object type', self, @font,
-      *(%w[Block Titanium].collect do |type_name|
-        MenuItem.new(type_name, self, @font) do |item|
-          @local[:create_npc][:type] = "Entity::#{type_name}"
-        end
-      end)
-    )
+      *object_type_submenus)
+
     object_creation_menu = Menu.new('Object creation', self, @font,
       MenuItem.new('Object type', self, @font) { object_type_menu },
       MenuItem.new(snap_text, self, @font) do
@@ -205,7 +215,8 @@ class GameWindow < Gosu::Window
       :position => [x, y],
       :velocity => [0, 0],
       :angle => 0,
-      :moving => true
+      :moving => true,
+      :hp => @local[:create_npc][:hp]
     )
   end
 

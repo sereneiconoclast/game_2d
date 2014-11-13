@@ -414,6 +414,9 @@ class Entity
   def all_state
     [registry_id_safe, @x, @y, @a, @x_vel, @y_vel, @moving]
   end
+  def <=>(other)
+    self.all_state <=> other.all_state
+  end
 
   def hash; self.class.hash ^ all_state.hash; end
   def eql?(other); self == other; end
