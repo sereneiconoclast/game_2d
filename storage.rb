@@ -1,5 +1,6 @@
 require 'fileutils'
 require 'json'
+require 'hash'
 
 class Storage
   def self.in_home_dir(name)
@@ -25,7 +26,7 @@ end
 class Settings
   def initialize(name)
     @name = name
-    @values = File.exist?(name) ? JSON.parse(IO.read(name)) : {}
+    @values = File.exist?(name) ? JSON.parse(IO.read(name)).fix_keys : {}
   end
 
   def save

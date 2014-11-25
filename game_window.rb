@@ -26,7 +26,6 @@ class GameWindow < Gosu::Window
   attr_accessor :player_id
 
   def initialize(player_name, hostname, port=DEFAULT_PORT, profile=false)
-    $server = false
     @conn_update_total = @engine_update_total = 0.0
     @conn_update_count = @engine_update_count = 0
     @profile = profile
@@ -229,8 +228,7 @@ class GameWindow < Gosu::Window
   def handle_input
     return if player.falling?
     move = move_for_keypress
-    @conn.send_move move
-    player.add_move move
+    @conn.send_move move # also creates a delta in the engine
   end
 
   # Check keyboard, return a motion symbol or nil

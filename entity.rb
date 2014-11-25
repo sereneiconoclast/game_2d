@@ -1,4 +1,6 @@
 require 'registerable'
+require 'serializable'
+require 'entity_constants'
 require 'facets/string/pathize'
 require 'facets/kernel/constant'
 
@@ -8,31 +10,20 @@ class NilClass
 end
 
 class Entity
+  include Serializable
   include Registerable
-
-  # All our drawings are 40x40
-  CELL_WIDTH_IN_PIXELS = 40
-
-  # We track entities at a resolution higher than pixels, called "subpixels"
-  # This is the smallest detectable motion, 1 / PIXEL_WIDTH of a pixel
-  PIXEL_WIDTH = 10
-
-  # The dimensions of a cell, equals the dimensions of an entity
-  WIDTH = HEIGHT = CELL_WIDTH_IN_PIXELS * PIXEL_WIDTH
-
-  # Maximum velocity is a full cell per tick, which is a lot
-  MAX_VELOCITY = WIDTH
+  include EntityConstants
 
   # X and Y position of the top-left corner
-  attr_accessor :x, :y, :moving
+  attr_accessor :x, :y, :moving, :space
 
-  attr_reader :space, :a, :x_vel, :y_vel
+  attr_reader :a, :x_vel, :y_vel
 
   # space: the game space
   # x, y: position in sub-pixels of the upper-left corner
   # a: angle, with 0 = up, 90 = right
   # x_vel, y_vel: velocity in sub-pixels
-  def initialize(x, y, a = 0, x_vel = 0, y_vel = 0)
+  def initialize(x = 0, y = 0, a = 0, x_vel = 0, y_vel = 0)
     @x, @y, self.a = x, y, a
     self.x_vel, self.y_vel = x_vel, y_vel
     @moving = true
@@ -327,60 +318,26 @@ class Entity
     end
   end
 
-  def to_json(*args)
-    as_json.to_json(*args)
-  end
-
   def as_json
-    {
+    Serializable.as_json(self).merge!(
       :class => self.class.to_s,
       :registry_id => registry_id,
       :position => [ self.x, self.y ],
       :velocity => [ self.x_vel, self.y_vel ],
       :angle => self.a,
-      :moving => self.moving?,
-    }.merge(additional_state)
+      :moving => self.moving?
+    )
   end
 
-  def additional_state; {} end
-
   def update_from_json(json)
-    new_x, new_y = json['position']
-    new_x_vel, new_y_vel = json['velocity']
-    new_angle = json['angle']
-    new_moving = json['moving']
+    new_x, new_y = json[:position]
+    new_x_vel, new_y_vel = json[:velocity]
+    new_angle = json[:angle]
+    new_moving = json[:moving]
 
     warp(new_x, new_y, new_x_vel, new_y_vel, new_angle, new_moving)
     self
   end
-
-  def self.from_json(json, generate_id=false)
-    class_name = json['class']
-    raise "Suspicious class name: #{class_name}" unless
-      (class_name == 'Player') || (class_name.start_with? 'Entity::')
-    require class_name.pathize
-    clazz = constant(class_name)
-    entity = clazz.new(0, 0)
-
-    # A registry ID must be specified either in the JSON or by the caller, but
-    # not both
-    if generate_id
-      entity.generate_id
-    else
-      entity.registry_id = json['registry_id']
-    end
-
-    entity.update_from_json(json)
-    entity
-  end
-
-  def space=(new_space)
-    @space = new_space
-    on_added_to_space if new_space
-  end
-
-  # Late initialization code to be run during @space << entity
-  def on_added_to_space; end
 
   def image_filename
     raise "No image filename defined"
@@ -408,16 +365,7 @@ class Entity
     "#{self.class} (#{registry_id_safe}) at #{x}x#{y}"
   end
 
-  def ==(other)
-    other.class.equal?(self.class) && other.all_state == self.all_state
-  end
   def all_state
     [registry_id_safe, @x, @y, @a, @x_vel, @y_vel, @moving]
   end
-  def <=>(other)
-    self.all_state <=> other.all_state
-  end
-
-  def hash; self.class.hash ^ all_state.hash; end
-  def eql?(other); self == other; end
 end

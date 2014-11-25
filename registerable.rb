@@ -1,10 +1,12 @@
-require 'securerandom'
-
-class Object
-  def nullsafe_registry_id; nil; end
+class NilClass
+  def nullsafe_registry_id; self; end
 end
 
 module Registerable
+  def registry_id?
+    @registry_id
+  end
+
   def registry_id
     @registry_id or raise("No ID set for #{self}")
   end
@@ -12,17 +14,12 @@ module Registerable
 
   # For use in to_s
   def registry_id_safe
-    @registry_id || '[NO ID]'
-  end
-
-  def generate_id
-    raise "#{self}: Already have ID #{@registry_id}, cannot set to #{id}" if @registry_id
-    @registry_id = SecureRandom.uuid
+    @registry_id || :NO_ID
   end
 
   def registry_id=(id)
     raise "#{self}: Already have ID #{@registry_id}, cannot set to #{id}" if @registry_id
     raise "#{self}: Invalid ID #{id}" unless id
-    @registry_id = id
+    @registry_id = id.to_sym
   end
 end

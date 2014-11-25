@@ -9,6 +9,7 @@ $LOAD_PATH << '.'
 require 'storage'
 require 'server_port'
 require 'game_space'
+require 'serializable'
 require 'entity'
 require 'player'
 
@@ -28,13 +29,13 @@ DEFAULT_REGISTRY_BROADCAST_EVERY = TICKS_PER_SECOND / 4
 
 class Game
   def initialize(args)
-    $server = true
-
     @storage = Storage.in_home_dir(args[:storage] || DEFAULT_STORAGE).dir('server')
     level_storage = @storage[args[:level]]
 
     if level_storage.empty?
       @space = GameSpace.new(self).establish_world(
+        args[:level],
+        nil, # level ID
         args[:width] || WORLD_WIDTH,
         args[:height] || WORLD_HEIGHT)
       @space.storage = level_storage
@@ -74,6 +75,9 @@ class Game
 
   attr_reader :tick
 
+  def world_name; @space.world_name; end
+  def world_id; @space.world_id; end
+  def world_highest_id; @space.highest_id; end
   def world_cell_width; @space.cell_width; end
   def world_cell_height; @space.cell_height; end
 
@@ -83,12 +87,12 @@ class Game
 
   def add_player(player_name)
     player = Player.new(player_name)
-    player.generate_id
     player.x = (@space.width - Entity::WIDTH) / 2
     player.y = (@space.height - Entity::HEIGHT) / 2
-    # We notify existing players first, *then* add the new player
-    @space.players.each {|p| player_connection(p).add_player(player, @tick) }
+    other_players = @space.players.dup
     @space << player
+    other_players.each {|p| player_connection(p).add_player(player, @tick) }
+    player
   end
 
   def player_id_connection(player_id)
@@ -108,7 +112,7 @@ class Game
 
   # Answering request from client
   def create_npc(json)
-    add_npc(Entity.from_json(json, :GENERATE_ID))
+    add_npc(Serializable.from_json(json, :GENERATE_ID))
   end
 
   def add_npc(npc)
@@ -117,8 +121,8 @@ class Game
     @space.players.each {|p| player_connection(p).add_npc npc, @tick }
   end
 
-  def send_updated_entity(entity)
-    @space.players.each {|p| player_connection(p).update_entity entity, @tick }
+  def send_updated_entities(*entities)
+    @space.players.each {|p| player_connection(p).update_entities entities, @tick }
   end
 
   def [](id)
@@ -134,7 +138,7 @@ class Game
   end
 
   def add_player_action(player_id, action)
-    at_tick = action['at_tick']
+    at_tick = action[:at_tick]
     unless at_tick
       $stderr.puts "Received update from #{player_id} without at_tick!"
       at_tick = @tick + 1
@@ -154,9 +158,9 @@ class Game
           $stderr.puts "No such player #{player_id} -- dropping move"
           next
         end
-        if (move = action['move'])
+        if (move = action[:move])
           player.add_move move
-        elsif (npc = action['create_npc'])
+        elsif (npc = action[:create_npc])
           create_npc npc
         else
           $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
@@ -182,8 +186,11 @@ class Game
     # Objects created during this tick won't be updated this tick
     @space.update
 
-    @port.broadcast(:registry => @space.registry.values, :at_tick => @tick) if
-      @registry_broadcast_every > 0 && (@tick % @registry_broadcast_every == 0)
+    @port.broadcast(
+      :registry => @space.all_registered,
+      :highest_id => @space.highest_id,
+      :at_tick => @tick
+    ) if @registry_broadcast_every > 0 && (@tick % @registry_broadcast_every == 0)
 
     if @self_check
       @space.check_for_grid_corruption

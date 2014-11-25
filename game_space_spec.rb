@@ -3,7 +3,7 @@ $LOAD_PATH << '.'
 require 'game_space'
 
 describe GameSpace do
-  subject { GameSpace.new(nil).establish_world(3,3) }
+  subject { GameSpace.new(nil).establish_world('lump', nil, 3, 3) }
   describe "@grid" do
     let(:grid) { subject.instance_variable_get :@grid }
     it "has the right size grid" do
@@ -272,33 +272,33 @@ describe GameSpace do
   describe "#register" do
     it "adds the object to the registry and entity list" do
       thing = Entity::Block.new(0, 0)
-      thing.registry_id = 'A'
+      thing.registry_id = :A
       expect(subject.npcs).to be_empty
-      expect(subject['A']).to be_nil
+      expect(subject[:A]).to be_nil
       expect(subject.registered?(thing)).to be false
       subject.register(thing)
       expect(subject.npcs).to eq([thing])
-      expect(subject['A']).to equal(thing)
+      expect(subject[:A]).to equal(thing)
       expect(subject.registered?(thing)).to be true
     end
     it "allows the same object to be registered twice" do
       thing = Entity::Block.new(0, 0)
-      thing.registry_id = 'A'
+      thing.registry_id = :A
       subject.register(thing)
       subject.register(thing)
       expect(subject.npcs).to eq([thing])
-      expect(subject['A']).to equal(thing)
+      expect(subject[:A]).to equal(thing)
       expect(subject.registered?(thing)).to be true
     end
     it "rejects another object with the same ID" do
       thing1 = Entity::Block.new(0, 0)
-      thing1.registry_id = 'A'
+      thing1.registry_id = :A
       subject.register(thing1)
       thing2 = Entity::Block.new(0, 0)
-      thing2.registry_id = 'A'
+      thing2.registry_id = :A
       subject.register(thing2)
       expect(subject.npcs).to eq([thing1])
-      expect(subject['A']).to equal(thing1)
+      expect(subject[:A]).to equal(thing1)
       expect(subject.registered?(thing1)).to be true
       expect { subject.registered?(thing2) }.to raise_exception
     end
@@ -306,22 +306,22 @@ describe GameSpace do
   describe "#deregister" do
     it "removes the object from the registry and entity list" do
       thing = Entity::Block.new(0, 0)
-      thing.registry_id = 'A'
+      thing.registry_id = :A
       subject.register(thing)
       subject.deregister(thing)
       expect(subject.npcs).to be_empty
-      expect(subject['A']).to be_nil
+      expect(subject[:A]).to be_nil
       expect(subject.registered?(thing)).to be false
     end
     it "refuses to remove the wrong object" do
       thing1 = Entity::Block.new(0, 0)
-      thing1.registry_id = 'A'
+      thing1.registry_id = :A
       subject.register(thing1)
       thing2 = Entity::Block.new(0, 0)
-      thing2.registry_id = 'A'
+      thing2.registry_id = :A
       expect { subject.deregister(thing2) }.to raise_exception
       expect(subject.npcs).to eq([thing1])
-      expect(subject['A']).to equal(thing1)
+      expect(subject[:A]).to equal(thing1)
       expect(subject.registered?(thing1)).to be true
     end
   end
@@ -329,19 +329,19 @@ describe GameSpace do
   describe "#<<" do
     it "registers the entity and adds it to the grid" do
       thing = Entity::Block.new(200, 400)
-      thing.registry_id = 'A'
+      thing.registry_id = :A
       subject << thing
-      expect(subject['A']).to equal(thing)
+      expect(subject[:A]).to equal(thing)
       expect(subject.at(0, 1)).to include thing
     end
     it "checks for conflicts" do
       thing1 = Entity::Block.new(200, 400)
-      thing1.registry_id = 'A'
+      thing1.registry_id = :A
       subject << thing1
       thing2 = Entity::Block.new(0, 100)
-      thing2.registry_id = 'B'
+      thing2.registry_id = :B
       subject << thing2
-      expect(subject['B']).to be_nil
+      expect(subject[:B]).to be_nil
     end
   end
 end

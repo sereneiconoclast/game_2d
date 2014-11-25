@@ -1,6 +1,8 @@
+require 'facets/kernel/try'
 require 'entity'
 require 'entity/pellet'
 require 'entity/block'
+require 'move/rise_up'
 require 'gosu'
 require 'zorder'
 
@@ -19,10 +21,11 @@ class Player < Entity
   # Amount to decelerate each tick when braking
   BRAKE_SPEED = 4
 
-  attr_accessor :player_name, :score, :build_block_id
+  attr_accessor :player_name, :score
+  attr_reader :build_block_id
 
-  def initialize(player_name)
-    super(0, 0)
+  def initialize(player_name = "<unknown>")
+    super
     @player_name = player_name
     @score = 0
     @moves = []
@@ -30,19 +33,16 @@ class Player < Entity
     @falling = false
     @build_block_id = nil
     @build_level = 0
-    @move_fiber = nil
-  end
-
-  def self.from_json(json)
-    player = Player.new(json['player_name'])
-    player.registry_id = registry_id = json['registry_id']
-    puts "Added player #{player}"
-    player.update_from_json(json)
+    @complex_move = nil
   end
 
   def sleep_now?; false; end
 
   def falling?; @falling; end
+
+  def build_block_id=(new_id)
+    @build_block_id = new_id.try(:to_sym)
+  end
 
   def building?; @build_block_id; end
 
@@ -65,10 +65,13 @@ class Player < Entity
 
   def update
     fail "No space set for #{self}" unless @space
-    if @move_fiber
-      return if @move_fiber.resume # more work to do
-      @move_fiber = nil
-      self.x_vel = self.y_vel = 0
+    check_for_disown_block
+
+    if @complex_move
+      # returns true if more work to do
+      return if @complex_move.update(self)
+      @complex_move.on_completion(self)
+      @complex_move = nil
     end
 
     underfoot = next_to(self.a + 180)
@@ -78,11 +81,11 @@ class Player < Entity
     end
 
     args = @moves.shift
-    case (current_move = args.delete('move').to_sym)
+    case (current_move = args.delete(:move).to_sym)
       when :slide_left, :slide_right, :brake, :flip, :build, :rise_up
         send current_move unless @falling
-      when :fire # server-side only
-        fire args['x_vel'], args['y_vel']
+      when :fire
+        fire args[:x_vel], args[:y_vel]
       else
         puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
     end if args
@@ -129,11 +132,9 @@ class Player < Entity
       move
     end
 
-    # Now see if we've moved off of a block we were building
-    if building? && !@space.entities_overlapping(@x, @y).include?(build_block)
-      build_block.owner_id = nil
-      disown_block
-    end
+    # Check again whether we've moved off of a block
+    # we were building
+    check_for_disown_block
   end
 
   def slide_left; slide(self.a - 90); end
@@ -165,123 +166,74 @@ class Player < Entity
     self.a += 180
   end
 
-  # Called server-side to create the actual pellet
+  # Create the actual pellet
   def fire(x_vel, y_vel)
-    return unless $server
     pellet = Entity::Pellet.new(@x, @y, 0, x_vel, y_vel)
     pellet.owner = self
-    pellet.generate_id
-    @space.game.add_npc pellet
+    @space << pellet
   end
 
-  # Called server-side to create the actual block
+  # Create the actual block
   def build
-    return unless $server
     if building?
       @build_level += 1
       if @build_level >= BUILD_TIME
         @build_level = 0
         build_block.hp += 1
-        @space.game.send_updated_entity build_block
       end
     else
       bb = Entity::Block.new(@x, @y)
       bb.owner_id = registry_id
       bb.hp = 1
-      @build_block_id = bb.generate_id
-      @space.game.add_npc bb
+      @space << bb # generates an ID
+      @build_block_id = bb.registry_id
       @build_level = 0
     end
   end
 
   def disown_block; $stderr.puts "#{self} disowning #{build_block}"; @build_block_id, @build_level = nil, 0; end
 
+  def check_for_disown_block
+    return unless building?
+    return if @space.entities_overlapping(@x, @y).include?(build_block)
+    build_block.owner_id = nil
+    build_block.wake!
+    disown_block
+  end
+
   def rise_up
-    @move_fiber = make_rise_up_fiber
+    @complex_move = Move::RiseUp.new(self)
   end
 
-  # Fiber for executing a multi-tick "rise up" maneuver
-  # 1) If not already at center of build_block, move there @ 1 pixel/tick
-  # 2) Rise exactly 1 cell @ 1 pixel/tick
-  #
-  # If step #2 is interrupted by an obstruction, repeat step #1 and stop
-  # If at any point the build_block is destroyed, simply abort
-  #
-  # Fiber returns true if it has more work to do, nil if it's finished
-  #
-  # Caller is responsible for zeroing velocity afterward
-  def make_rise_up_fiber
-    blok = build_block
-    start_x, start_y = blok.x, blok.y
-    l = lambda do
-      # step 1
-      while x != start_x || y != start_y
-        # abort if build_block destroyed
-        return unless blok == build_block
-
-        self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
-        self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
-        move || return # move failed somehow
-        Fiber.yield true
-      end # end step 1
-
-      self.x_vel, self.y_vel = angle_to_vector(self.a, PIXEL_WIDTH)
-      CELL_WIDTH_IN_PIXELS.times do
-        # abort if build_block destroyed
-        return unless blok == build_block
-
-        move || break # move failed somehow, go to step 3
-        Fiber.yield true
-      end and return # done step 2
-
-      # Step 2 failed.  Step 3: Repeat step 1
-      while x != start_x || y != start_y
-        # abort if build_block destroyed
-        return unless blok == build_block
-
-        self.x_vel = [[start_x - x, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
-        self.y_vel = [[start_y - y, -PIXEL_WIDTH].max, PIXEL_WIDTH].min
-        move || return # move failed somehow
-        Fiber.yield true
-      end # end step 3
-
-      nil # done step 3
-    end # lambda
-
-    Fiber.new &l
-  end
-
-  # Server side: Accepts a hash, with a key 'move' => 'move_type'
-  # Client side: Accepts a symbol for the move, plus a hash with
-  # additional args
-  def add_move(new_move, args={})
+  # Accepts a hash, with a key :move => move_type
+  def add_move(new_move)
     return unless new_move
-    return (@moves << new_move) if new_move.is_a?(Hash) # server side
-    args['move'] = new_move
-    @moves << args
+    @moves << new_move
   end
 
   def to_s
-    "#{player_name} (#{registry_id}) at #{x}x#{y}"
+    "#{player_name} (#{registry_id_safe}) at #{x}x#{y}"
   end
 
   def all_state
-    [player_name] + super + [score, build_block_id]
+    super.unshift(player_name).push(
+      score, build_block_id, @complex_move)
   end
 
   def as_json
-    super().merge(
-      :class => 'Player',
+    super.merge!(
       :player_name => player_name,
       :score => score,
       :build_block => @build_block_id,
+      :complex_move => @complex_move.as_json
     )
   end
 
   def update_from_json(json)
-    @player_name = json['player_name']
-    @score = json['score']
-    @build_block_id = json['build_block']
+    @player_name = json[:player_name]
+    @score = json[:score]
+    @build_block_id = json[:build_block].try(:to_sym)
+    @complex_move = Serializable.from_json(json[:complex_move])
     super
   end
 

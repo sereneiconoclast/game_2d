@@ -1,7 +1,9 @@
+require 'securerandom'
 require 'delegate'
 require 'set'
 require 'wall'
 require 'player'
+require 'serializable'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).
@@ -48,12 +50,13 @@ end
 
 
 class GameSpace
-  attr_reader :registry, :players, :npcs, :cell_width, :cell_height, :game
-  attr_accessor :storage
+  attr_reader :world_name, :world_id, :players, :npcs, :cell_width, :cell_height, :game
+  attr_accessor :storage, :highest_id
 
   def initialize(game=nil)
     @game = game
     @grid = @storage = nil
+    @highest_id = 0
 
     @registry = {}
 
@@ -66,7 +69,9 @@ class GameSpace
   end
 
   # Width and height, measured in cells
-  def establish_world(cell_width, cell_height)
+  def establish_world(name, id, cell_width, cell_height)
+    @world_name = name
+    @world_id = (id || SecureRandom.uuid).to_sym
     @cell_width, @cell_height = cell_width, cell_height
 
     # Outer array is X-indexed; inner arrays are Y-indexed
@@ -98,36 +103,43 @@ class GameSpace
   end
 
   def copy_from(original)
-    establish_world(original.cell_width, original.cell_height)
+    establish_world(original.world_name, original.world_id, original.cell_width, original.cell_height)
+    @highest_id = original.highest_id
 
     # @game and @storage should point to the same object (no clone)
     @game, @storage = original.game, original.storage
 
     # Registry should contain all objects - clone those
-    original.registry.each {|id, ent| self << ent.clone }
+    original.all_registered.each {|ent| self << ent.clone }
 
     self
   end
 
   def self.load(game, storage)
-    cell_width, cell_height = storage['cell_width'], storage['cell_height']
-    space = GameSpace.new(game).establish_world(cell_width, cell_height)
+    name, id, cell_width, cell_height =
+      storage[:world_name], storage[:world_id],
+      storage[:cell_width], storage[:cell_height]
+    space = GameSpace.new(game).establish_world(name, id, cell_width, cell_height)
     space.storage = storage
     space.load
   end
 
   def save
-    @storage['cell_width'], @storage['cell_height'] = @cell_width, @cell_height
-    @storage['npcs'] = @npcs
+    @storage[:world_name] = @world_name
+    @storage[:world_id] = @world_id
+    @storage[:cell_width], @storage[:cell_height] = @cell_width, @cell_height
+    @storage[:highest_id] = @highest_id
+    @storage[:npcs] = @npcs
     @storage.save
   end
 
   # TODO: Handle this while server is running and players are connected
   # TODO: Handle resizing the space
   def load
-    @storage['npcs'].each do |json|
+    @highest_id = @storage[:highest_id]
+    @storage[:npcs].each do |json|
       puts "Loading #{json.inspect}"
-      self << Entity.from_json(json)
+      self << Serializable.from_json(json)
     end
     self
   end
@@ -137,9 +149,18 @@ class GameSpace
   def width; @cell_width * Entity::WIDTH; end
   def height; @cell_height * Entity::HEIGHT; end
 
+  def next_id
+    "R#{@highest_id += 1}".to_sym
+  end
+
   # Retrieve entity by ID
   def [](registry_id)
-    @registry[registry_id]
+    return nil unless registry_id
+    @registry[registry_id.to_sym]
+  end
+
+  def all_registered
+    @registry.values
   end
 
   # List of entities by type matching the specified entity
@@ -328,6 +349,8 @@ class GameSpace
 
   # Add an entity.  Will wake neighboring entities
   def <<(entity)
+    entity.registry_id = next_id unless entity.registry_id?
+
     fail "Already registered: #{entity}" if registered?(entity)
 
     # Need to assign the space before entities_obstructing()
@@ -431,8 +454,9 @@ class GameSpace
   end
 
   def ==(other)
-    other.class.equal?(self.class) &&
-      @grid == other.instance_variable_get(:@grid) &&
-      self.registry == other.registry
+    other.class.equal?(self.class) && other.all_state == self.all_state
+  end
+  def all_state
+    [@world_name, @world_id, @registry, @grid, @highest_id]
   end
 end

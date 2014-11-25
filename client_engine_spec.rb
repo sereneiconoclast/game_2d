@@ -123,7 +123,6 @@ class FakeGameWindow
 
   def generate_move(move)
     @conn.send_move move
-    player.add_move move
   end
 end
 
@@ -152,59 +151,85 @@ describe FakeGame do
   ) }
   let(:window) { game; FakeGameWindow.new(hostname, port_number, player_name) }
 
+  def update_both
+    game.update
+    window.update
+  end
+
+  def expect_spaces_to_match
+    expect(window.space).to eq(game.space)
+  end
+
   context "with default registry syncs" do
     let(:registry_broadcast_every) { nil }
     it "is in sync after one update" do
       window
 
-      game.update
-      window.update
+      update_both
 
-      expect(game.space).to eq(window.space)
+      expect_spaces_to_match
     end
-    it "is in sync after a bunch of stuff" do
+    it "is in sync after a fall and a build" do
       window
 
       expect(game.tick).to eq(-1)
       expect(window.engine.tick).to be_nil
 
-      30.times do |n|
-        game.update
+      28.times do |n|
+        update_both
         expect(game.tick).to eq(n)
-        window.update
         expect(window.engine.tick).to eq(n)
-        expect(game.space).to eq(window.space)
+        expect_spaces_to_match
       end
 
       expect(game.space.players.size).to eq(1)
       expect(game.space.npcs.size).to eq(0)
 
-      # Command generated at tick 29, scheduled for tick 35
+      plr = game.space.players.first
+      expect(plr.y).to eq(800)
+
+      # Command generated at tick 27, scheduled for tick 33
       window.generate_move :build
 
-      5.times do # ticks 30 - 34
-        game.update; window.update
-        expect(game.space).to eq(window.space)
+      5.times do # ticks 28 - 32
+        update_both
+        expect_spaces_to_match
         expect(game.space.npcs.size).to eq(0)
       end
 
-      # tick 35
-      game.update; window.update
-      expect(game.tick).to eq(35)
+      # tick 33
+      update_both
+      expect(game.tick).to eq(33)
       expect(game.space.npcs.size).to eq(1)
 
-      expect(game.space).to eq(window.space)
+      expect_spaces_to_match
+
+      # Command generated at tick 33, scheduled for tick 39
+      window.generate_move :rise_up
+      5.times do # ticks 34 - 38
+        update_both
+        $stderr.puts "TICK ##{game.tick}"
+        expect_spaces_to_match
+        expect(plr.y).to eq(800)
+      end
+      41.times do |n| # ticks 39 - 79
+        update_both
+        $stderr.puts "TICK ##{game.tick}"
+        expect(plr.y).to eq(800 - (10 * n))
+        cplr = window.engine.space.players.first
+        binding.pry unless cplr == plr
+        expect(cplr).to eq(plr)
+        expect_spaces_to_match
+      end
     end
   end
   context "with no registry syncs" do
     let(:registry_broadcast_every) { 0 }
     it "is in sync after one update" do
       window
+      update_both
 
-      game.update
-      window.update
-
-      expect(game.space).to eq(window.space)
+      expect_spaces_to_match
     end
   end
 end

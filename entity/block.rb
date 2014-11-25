@@ -11,12 +11,11 @@ class Block < OwnedEntity
 
   def hp=(p); @hp = [[p, MAX_HP].min, 0].max; end
 
-  def additional_state
-    super.merge!(:hp => hp)
-  end
+  def all_state; super.push(hp); end
+  def as_json; super.merge!(:hp => hp); end
 
   def update_from_json(json)
-    self.hp = json['hp'] if json['hp']
+    self.hp = json[:hp] if json[:hp]
     super
   end
 
@@ -56,15 +55,6 @@ class Block < OwnedEntity
     puts "#{self}: Ouch!"
     self.hp -= 1
     @space.doom(self) if hp <= 0
-  end
-
-  # This is telling me I need a better solution for keeping
-  # the client in sync with the server.  This logic is too
-  # complicated and specific.
-  def update_my_owner(new_owner_id)
-    @space[@owner_id].build_block_id = nil if @owner_id
-    super
-    @space[@owner_id].build_block_id = registry_id if @owner_id
   end
 
   def destroy!
