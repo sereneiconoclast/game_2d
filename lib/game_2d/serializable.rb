@@ -45,7 +45,7 @@ module Serializable
       (class_name == 'Player') ||
       (class_name.start_with? 'Entity::') ||
       (class_name.start_with? 'Move::')
-    require class_name.pathize
+    require "game_2d/#{class_name.pathize}"
     clazz = constant(class_name)
     it = clazz.new
 

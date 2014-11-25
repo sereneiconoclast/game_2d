@@ -1,6 +1,6 @@
 require 'renet'
 require 'json'
-require 'server_connection'
+require 'game_2d/server_connection'
 
 class ServerPort
   def initialize(game, port_number, max_clients)

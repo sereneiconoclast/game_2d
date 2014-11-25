@@ -1,4 +1,4 @@
-require 'entity'
+require 'game_2d/entity'
 
 class Wall < Entity
   def initialize(space, cell_x, cell_y)

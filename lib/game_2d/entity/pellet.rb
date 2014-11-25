@@ -1,5 +1,5 @@
-require 'entity/block'
-require 'entity/owned_entity'
+require 'game_2d/entity/block'
+require 'game_2d/entity/owned_entity'
 
 class Entity
 
@@ -21,7 +21,7 @@ class Pellet < OwnedEntity
     @space.doom(self)
   end
 
-  def image_filename; "media/pellet.png" end
+  def image_filename; "pellet.png" end
 end
 
 end

@@ -1,8 +1,8 @@
-require 'registerable'
-require 'serializable'
-require 'entity_constants'
 require 'facets/string/pathize'
 require 'facets/kernel/constant'
+require 'game_2d/registerable'
+require 'game_2d/serializable'
+require 'game_2d/entity_constants'
 
 class NilClass
   # Ignore this
@@ -346,7 +346,7 @@ class Entity
   def draw_zorder; ZOrder::Objects end
 
   def draw(window)
-    anim = window.animation[image_filename]
+    anim = window.animation[window.media(image_filename)]
     img = anim[Gosu::milliseconds / 100 % anim.size]
     # Entity's pixel_x/pixel_y is the location of the upper-left corner
     # draw_rot wants us to specify the point around which rotation occurs

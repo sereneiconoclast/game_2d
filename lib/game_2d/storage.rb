@@ -1,6 +1,6 @@
 require 'fileutils'
 require 'json'
-require 'hash'
+require 'game_2d/hash'
 
 class Storage
   def self.in_home_dir(name)

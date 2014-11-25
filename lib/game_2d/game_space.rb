@@ -1,9 +1,9 @@
 require 'securerandom'
 require 'delegate'
 require 'set'
-require 'wall'
-require 'player'
-require 'serializable'
+require 'game_2d/wall'
+require 'game_2d/player'
+require 'game_2d/serializable'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).

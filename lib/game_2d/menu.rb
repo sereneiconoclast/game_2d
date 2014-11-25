@@ -1,5 +1,5 @@
 require 'gosu'
-require 'zorder'
+require 'game_2d/zorder'
 
 class Menu
   def initialize(name, window, font, *choices)

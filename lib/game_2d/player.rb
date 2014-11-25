@@ -1,10 +1,10 @@
 require 'facets/kernel/try'
-require 'entity'
-require 'entity/pellet'
-require 'entity/block'
-require 'move/rise_up'
 require 'gosu'
-require 'zorder'
+require 'game_2d/entity'
+require 'game_2d/entity/pellet'
+require 'game_2d/entity/block'
+require 'game_2d/move/rise_up'
+require 'game_2d/zorder'
 
 # The base Player class representing what all Players have in common
 # Moves can be enqueued by calling add_move
@@ -237,7 +237,7 @@ class Player < Entity
     super
   end
 
-  def image_filename; "media/player.png"; end
+  def image_filename; "player.png"; end
 
   def draw_zorder; ZOrder::Player end
 

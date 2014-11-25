@@ -2,17 +2,15 @@
 ## License: Same as for Gosu (MIT)
 
 require 'rubygems'
-require 'trollop'
 require 'gosu'
 
-$LOAD_PATH << '.'
-require 'client_connection'
-require 'client_engine'
-require 'game_space'
-require 'entity'
-require 'player'
-require 'menu'
-require 'zorder'
+require 'game_2d/client_connection'
+require 'game_2d/client_engine'
+require 'game_2d/game_space'
+require 'game_2d/entity'
+require 'game_2d/player'
+require 'game_2d/menu'
+require 'game_2d/zorder'
 
 SCREEN_WIDTH = 640  # in pixels
 SCREEN_HEIGHT = 480 # in pixels
@@ -35,16 +33,15 @@ class GameWindow < Gosu::Window
 
     @pressed_buttons = []
 
-    @background_image = Gosu::Image.new(self, "media/Space.png", true)
+    @background_image = Gosu::Image.new(self, media("Space.png"), true)
     @animation = Hash.new do |h, k|
       h[k] = Gosu::Image::load_tiles(
         self, k, Entity::CELL_WIDTH_IN_PIXELS, Entity::CELL_WIDTH_IN_PIXELS, false)
     end
 
-    @cursor_anim = @animation["media/crosshair.gif"]
+    @cursor_anim = @animation[media("crosshair.gif")]
 
-    # Put the beep here, as it is the environment now that determines collision
-    @beep = Gosu::Sample.new(self, "media/Beep.wav")
+    @beep = Gosu::Sample.new(self, media("Beep.wav")) # not used yet
 
     @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
 
@@ -96,6 +93,10 @@ class GameWindow < Gosu::Window
     @engine = @conn.engine = ClientEngine.new(self)
     @run_start = Time.now.to_f
     @update_count = 0
+  end
+
+  def media(filename)
+    "#{File.dirname __FILE__}/../../media/#{filename}"
   end
 
   def space
@@ -233,16 +234,7 @@ class GameWindow < Gosu::Window
 
   # Check keyboard, return a motion symbol or nil
   #
-  # Returning a symbol is only useful for actions we can
-  # safely process client-side without a server round-trip.
-  # Any action that creates another entity must be sent to the
-  # server and processed there first, since only the server is
-  # allowed to generate registry IDs.  TODO: This could possibly
-  # be fixed, by assigning an ID to every move, and having the
-  # server send back the ID of the move that created the object.
-  # Then the client could make up a temporary ID for its idea of
-  # the object, and substitute the actual ID as soon as it hears
-  # what that is.
+  #
   def move_for_keypress
     # Generated once for each keypress
     until @pressed_buttons.empty?
@@ -250,8 +242,6 @@ class GameWindow < Gosu::Window
       case button
         when Gosu::KbUp, Gosu::KbW
           return (player.building?) ? :rise_up : :flip
-        when Gosu::KbLeft, Gosu::KbRight, Gosu::KbA, Gosu::KbD # nothing
-        else puts "Ignoring key #{button}"
       end
     end
 
@@ -264,27 +254,7 @@ class GameWindow < Gosu::Window
       when button_down?(Gosu::KbRightControl), button_down?(Gosu::KbLeftControl)
         :brake
       when button_down?(Gosu::KbDown), button_down?(Gosu::KbS)
-        send_build
-        nil
+        :build
     end
   end
-
-  def send_build
-    @conn.send_move :build
-  end
-end
-
-if $PROGRAM_NAME == __FILE__
-  opts = Trollop::options do
-    opt :name, "Player name", :type => :string, :required => true
-    opt :hostname, "Hostname of server", :type => :string, :required => true
-    opt :port, "Port number", :default => DEFAULT_PORT
-    opt :profile, "Turn on profiling", :type => :boolean
-    opt :debug_traffic, "Debug network traffic", :type => :boolean
-  end
-
-  $debug_traffic = opts[:debug_traffic] || false
-
-  window = GameWindow.new( opts[:name], opts[:hostname], opts[:port], opts[:profile] )
-  window.show
 end

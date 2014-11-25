@@ -5,7 +5,7 @@ class Titanium < Entity
 
   def sleep_now?; true; end
 
-  def image_filename; "media/titanium.gif"; end
+  def image_filename; "titanium.gif"; end
 end
 
 end

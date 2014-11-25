@@ -1,6 +1,6 @@
 require 'renet'
 require 'json'
-require 'hash'
+require 'game_2d/hash'
 
 # The client creates one of these.
 # It is then used for all communication with the server.

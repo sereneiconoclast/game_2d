@@ -2,22 +2,20 @@
 ## License: Same as for Gosu (MIT)
 
 require 'rubygems'
-require 'trollop'
 require 'gosu'
 
-$LOAD_PATH << '.'
-require 'storage'
-require 'server_port'
-require 'game_space'
-require 'serializable'
-require 'entity'
-require 'player'
+require 'game_2d/storage'
+require 'game_2d/server_port'
+require 'game_2d/game_space'
+require 'game_2d/serializable'
+require 'game_2d/entity'
+require 'game_2d/player'
 
 WORLD_WIDTH = 100 # in cells
 WORLD_HEIGHT = 70 # in cells
 
 DEFAULT_PORT = 4321
-DEFAULT_STORAGE = '.cnstruxn'
+DEFAULT_STORAGE = '.game_2d'
 MAX_CLIENTS = 32
 
 # By default, Gosu calls update() 60 times per second.
@@ -212,23 +210,4 @@ class Game
     end # infinite loop
   end # run
 
-end
-
-if $PROGRAM_NAME == __FILE__
-  opts = Trollop::options do
-    opt :level, "Level name", :type => :string, :required => true
-    opt :width, "Level width", :type => :integer
-    opt :height, "Level height", :type => :integer
-    opt :port, "Port number", :type => :integer
-    opt :storage, "Data storage dir (in home directory)", :type => :string
-    opt :max_clients, "Maximum clients", :type => :integer
-    opt :self_check, "Run data consistency checks", :type => :boolean
-    opt :profile, "Turn on profiling", :type => :boolean
-    opt :debug_traffic, "Debug network traffic", :type => :boolean
-    opt :registry_broadcast_every, "Send registry broadcasts every N frames (0 = never)", :type => :integer
-  end
-
-  $debug_traffic = opts[:debug_traffic] || false
-
-  Game.new(opts).run
 end

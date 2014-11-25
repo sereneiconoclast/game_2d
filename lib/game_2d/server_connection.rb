@@ -1,5 +1,5 @@
 require 'json'
-require 'hash'
+require 'game_2d/hash'
 
 # An instance of this class is created by ServerPort whenever an
 # incoming connection is accepted.

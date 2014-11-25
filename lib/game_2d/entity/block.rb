@@ -1,4 +1,4 @@
-require 'entity/owned_entity'
+require 'game_2d/entity/owned_entity'
 
 class Entity
 
@@ -67,7 +67,7 @@ class Block < OwnedEntity
     %w(dirt brick cement steel unlikelium)[level]
   end
 
-  def image_filename; "media/#{level_name}.gif"; end
+  def image_filename; "#{level_name}.gif"; end
 end
 
 end

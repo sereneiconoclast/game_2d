@@ -1,5 +1,5 @@
 require 'facets/kernel/try'
-require 'serializable'
+require 'game_2d/serializable'
 
 # A complex move is any move that has its own state.
 # Moves that span multiple ticks are complex, because
