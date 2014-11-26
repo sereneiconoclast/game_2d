@@ -12,6 +12,7 @@ require 'game_2d/entity'
 require 'game_2d/player'
 require 'game_2d/menu'
 require 'game_2d/message'
+require 'game_2d/password_dialog'
 require 'game_2d/zorder'
 
 SCREEN_WIDTH = 640  # in pixels
@@ -69,8 +70,7 @@ class GameWindow < Gosu::Window
     @conn = ClientConnection.new(hostname, port, self, player_name, key_size)
     @engine = @conn.engine = ClientEngine.new(self)
     @menu = build_top_menu
-
-    @conn.start
+    @dialog = PasswordDialog.new(self, @font)
   end
 
   def display_message(*lines)
@@ -182,6 +182,7 @@ class GameWindow < Gosu::Window
 
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
+    @dialog.draw if @dialog
     @message.draw if @message
     @menu.draw if @menu
 
@@ -210,7 +211,14 @@ class GameWindow < Gosu::Window
 
   def button_down(id)
     case id
-      when Gosu::KbP then @conn.send_ping
+      when Gosu::KbEnter, Gosu::KbReturn then
+        if @dialog
+          @dialog.enter
+          @conn.start(@dialog.password)
+          @dialog = nil
+        end
+      when Gosu::KbP then
+        @conn.send_ping unless @dialog
       when Gosu::KbEscape then @menu = @top_menu
       when Gosu::MsLeft then # left-click
         if new_menu = @menu.handle_click
@@ -222,7 +230,7 @@ class GameWindow < Gosu::Window
         end
       when Gosu::MsRight then # right-click
         send_create_npc
-      else @pressed_buttons << id
+      else @pressed_buttons << id unless @dialog
     end
   end
 

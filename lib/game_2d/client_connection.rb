@@ -31,7 +31,8 @@ class ClientConnection
     @socket.on_packet_receive(method(:on_packet))
   end
 
-  def start
+  def start(password)
+    @password = password
     Thread.new do
       # This can take a while
       @game.display_message! "Constructing #{@key_size}-bit DH key..."
@@ -60,8 +61,8 @@ class ClientConnection
 
   def login(server_public_key)
     self.key = @dh.compute_key(OpenSSL::BN.new server_public_key)
-    password = "swordfish"
-    data, iv = encrypt(password)
+    data, iv = encrypt(@password)
+    @password = nil
     send_record(
       :password => strict_encode64(data),
       :iv => strict_encode64(iv)
@@ -121,7 +122,7 @@ class ClientConnection
   end
 
   def send_move(move, args={})
-    return unless move
+    return unless move && online?
     args[:move] = move.to_s
     delta = { :at_tick => send_actions_at, :move => args }
     send_record delta
@@ -130,6 +131,7 @@ class ClientConnection
   end
 
   def send_create_npc(npc)
+    return unless online?
     delta = { :at_tick => send_actions_at, :create_npc => npc }
     send_record delta
     @engine.add_delta delta
@@ -144,6 +146,7 @@ class ClientConnection
   end
 
   def send_record(data, reliable=false)
+    return unless online?
     debug_packet('Sending', data)
     @socket.send_packet(data.to_json, reliable, 0)
     @socket.flush
