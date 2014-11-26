@@ -27,8 +27,10 @@ DEFAULT_REGISTRY_BROADCAST_EVERY = TICKS_PER_SECOND / 4
 
 class Game
   def initialize(args)
-    @storage = Storage.in_home_dir(args[:storage] || DEFAULT_STORAGE).dir('server')
-    level_storage = @storage[args[:level]]
+    all_storage = Storage.in_home_dir(args[:storage] || DEFAULT_STORAGE)
+    @player_storage = all_storage.dir('players')['players']
+    @levels_storage = all_storage.dir('levels')
+    level_storage = @levels_storage[args[:level]]
 
     if level_storage.empty?
       @space = GameSpace.new(self).establish_world(
@@ -81,6 +83,15 @@ class Game
 
   def save
     @space.save
+  end
+
+  def player_data(player_name)
+    @player_storage[player_name]
+  end
+
+  def store_player_data(player_name, data)
+    @player_storage[player_name] = data
+    @player_storage.save
   end
 
   def add_player(player_name)

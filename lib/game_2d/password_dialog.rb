@@ -1,7 +1,10 @@
 require 'gosu'
 require 'game_2d/message'
+require 'game_2d/encryption'
 
 class PasswordDialog < Message
+  include Encryption
+
   PROMPT = 'Enter password:'
   PRINTABLE_ASCII = (32..126).to_a.pack 'C*'
 
@@ -32,5 +35,10 @@ class PasswordDialog < Message
 
   def password
     @text.text
+  end
+  private :password
+
+  def password_hash
+    make_password_hash password
   end
 end

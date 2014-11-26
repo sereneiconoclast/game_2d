@@ -29,14 +29,19 @@ class ServerConnection
     send_record response, true # answer reliably
   end
 
-  def answer_login(b64_password, b64_iv)
-    password = decrypt(
-      strict_decode64(b64_password),
+  def answer_login(b64_password_hash, b64_iv)
+    password_hash = decrypt(
+      strict_decode64(b64_password_hash),
       strict_decode64(b64_iv))
-    unless password == "swordfish"
-      $stderr.puts "Wrong password for @player_name"
-      disconnect!
-      return
+    player_data = @game.player_data(@player_name)
+    if player_data
+      unless password_hash == player_data[:password_hash]
+        $stderr.puts "Wrong password for #{@player_name} (#{password_hash} != #{player_data[:password_hash]})"
+        disconnect!
+        return
+      end
+    else # new player
+      @game.store_player_data @player_name, :password_hash => password_hash
     end
 
     player = @game.add_player(@player_name)
@@ -102,8 +107,8 @@ class ServerConnection
     debug_packet('Received', hash)
     if (handshake = hash[:handshake])
       answer_handshake(handshake)
-    elsif (password = hash[:password])
-      answer_login(password, hash[:iv])
+    elsif (password_hash = hash[:password_hash])
+      answer_login(password_hash, hash[:iv])
     elsif (hash[:save])
       @game.save
     elsif (ping = hash[:ping])

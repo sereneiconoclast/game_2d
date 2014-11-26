@@ -29,13 +29,14 @@ class ClientConnection
     @socket.on_connection(method(:on_connect))
     @socket.on_disconnection(method(:on_close))
     @socket.on_packet_receive(method(:on_packet))
+
+    @dh = @password_hash = nil
   end
 
-  def start(password)
-    @password = password
+  def start(password_hash)
+    @password_hash = password_hash
     Thread.new do
-      # This can take a while
-      @game.display_message! "Constructing #{@key_size}-bit DH key..."
+      @game.display_message! "Establishing encryption (#{@key_size}-bit)..."
       @dh = OpenSSL::PKey::DH.new(@key_size)
 
       # Connect to server and kick off handshaking
@@ -61,10 +62,10 @@ class ClientConnection
 
   def login(server_public_key)
     self.key = @dh.compute_key(OpenSSL::BN.new server_public_key)
-    data, iv = encrypt(@password)
-    @password = nil
+    data, iv = encrypt(@password_hash)
+    @password_hash = nil
     send_record(
-      :password => strict_encode64(data),
+      :password_hash => strict_encode64(data),
       :iv => strict_encode64(iv)
     )
   end

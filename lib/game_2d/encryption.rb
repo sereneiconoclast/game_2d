@@ -24,4 +24,12 @@ module Encryption
     decipher.iv = iv
     decipher.update(data) + decipher.final
   end
+
+  # Same sort of thing /etc/passwd uses.
+  # Provides no security against snooping passwords off
+  # the wire, but does make it safer to handle the user
+  # password file.
+  def make_password_hash(password)
+    password.crypt('RB')
+  end
 end

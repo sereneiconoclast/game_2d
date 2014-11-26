@@ -214,7 +214,7 @@ class GameWindow < Gosu::Window
       when Gosu::KbEnter, Gosu::KbReturn then
         if @dialog
           @dialog.enter
-          @conn.start(@dialog.password)
+          @conn.start(@dialog.password_hash)
           @dialog = nil
         end
       when Gosu::KbP then
