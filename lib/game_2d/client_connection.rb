@@ -1,11 +1,17 @@
 require 'renet'
 require 'json'
+require 'base64'
+require 'openssl'
 require 'game_2d/hash'
+require 'game_2d/encryption'
 
 # The client creates one of these.
 # It is then used for all communication with the server.
 
 class ClientConnection
+  include Encryption
+  include Base64
+
   attr_reader :player_name
   attr_accessor :engine
 
@@ -14,17 +20,29 @@ class ClientConnection
   # the fleet
   ACTION_DELAY = 6 # 1/10 of a second
 
-  def initialize(host, port, game, player_name, timeout=2000)
+  def initialize(host, port, game, player_name, key_size, timeout=2000)
     # remote host address, remote host port, channels, download bandwidth, upload bandwidth
     @socket = _create_connection(host, port, 2, 0, 0)
-    @game = game
-    @player_name = player_name
+    @host, @port, @game, @player_name, @key_size, @timeout =
+     host,  port,  game,  player_name,  key_size,  timeout
 
     @socket.on_connection(method(:on_connect))
     @socket.on_disconnection(method(:on_close))
     @socket.on_packet_receive(method(:on_packet))
+  end
 
-    @socket.connect(timeout)
+  def start
+    Thread.new do
+      # This can take a while
+      @game.display_message! "Constructing #{@key_size}-bit DH key..."
+      @dh = OpenSSL::PKey::DH.new(@key_size)
+
+      # Connect to server and kick off handshaking
+      # We will create our player object only after we've been accepted by the server
+      # and told our starting position
+      @game.display_message! "Connecting to #{@host}:#{@port} as #{@player_name}"
+      @socket.connect(@timeout)
+    end
   end
 
   def _create_connection(*args)
@@ -32,9 +50,22 @@ class ClientConnection
   end
 
   def on_connect
-    puts "Connected to server - sending handshake"
-    # send handshake reliably
-    send_record( { :handshake => { :player_name => @player_name } }, true)
+    @game.display_message "Connected, logging in"
+    send_record( { :handshake => {
+      :player_name => @player_name,
+      :dh_public_key => @dh.public_key.to_pem,
+      :client_public_key => @dh.pub_key.to_s
+    } }, true) # send handshake reliably
+  end
+
+  def login(server_public_key)
+    self.key = @dh.compute_key(OpenSSL::BN.new server_public_key)
+    password = "swordfish"
+    data, iv = encrypt(password)
+    send_record(
+      :password => strict_encode64(data),
+      :iv => strict_encode64(iv)
+    )
   end
 
   def on_close
@@ -52,11 +83,18 @@ class ClientConnection
       puts "Ping took #{stop - pong[:start]} seconds"
     end
 
+    server_public_key = hash[:server_public_key]
+    if server_public_key
+      login(server_public_key)
+      return
+    end
+
     at_tick = hash[:at_tick]
     fail "No at_tick in #{hash.inspect}" unless at_tick
 
     world = hash[:world]
     if world
+      @game.clear_message
       @engine.establish_world(world, at_tick)
     end
 
@@ -123,5 +161,5 @@ class ClientConnection
   end
 
   def online?; @socket.online?; end
-  def disconnect; @socket.disconnect(200); end
+  def disconnect; @socket.disconnect(200) if online?; end
 end

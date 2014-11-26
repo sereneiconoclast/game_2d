@@ -1,6 +1,7 @@
 ## Author: Greg Meyers
 ## License: Same as for Gosu (MIT)
 
+require 'facets/kernel/try'
 require 'rubygems'
 require 'gosu'
 
@@ -10,26 +11,34 @@ require 'game_2d/game_space'
 require 'game_2d/entity'
 require 'game_2d/player'
 require 'game_2d/menu'
+require 'game_2d/message'
 require 'game_2d/zorder'
 
 SCREEN_WIDTH = 640  # in pixels
 SCREEN_HEIGHT = 480 # in pixels
 
 DEFAULT_PORT = 4321
+DEFAULT_KEY_SIZE = 1024
 
 # The Gosu::Window is always the "environment" of our game
 # It also provides the pulse of our game
 class GameWindow < Gosu::Window
-  attr_reader :animation, :font
+  attr_reader :animation, :font, :top_menu
   attr_accessor :player_id
 
-  def initialize(player_name, hostname, port=DEFAULT_PORT, profile=false)
+  def initialize(opts = {})
+    player_name = opts[:name]
+    hostname = opts[:hostname]
+    port = opts[:port] || DEFAULT_PORT
+    key_size = opts[:key_size] || DEFAULT_KEY_SIZE
+    profile = opts[:profile] || false
+
     @conn_update_total = @engine_update_total = 0.0
     @conn_update_count = @engine_update_count = 0
     @profile = profile
 
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
-    self.caption = "Ruby Gosu Game"
+    self.caption = "Game 2D"
 
     @pressed_buttons = []
 
@@ -53,11 +62,68 @@ class GameWindow < Gosu::Window
         :snap => false,
       },
     }
+
+    @run_start = Time.now.to_f
+    @update_count = 0
+
+    @conn = ClientConnection.new(hostname, port, self, player_name, key_size)
+    @engine = @conn.engine = ClientEngine.new(self)
+    @menu = build_top_menu
+
+    @conn.start
+  end
+
+  def display_message(*lines)
+    if @message
+      @message.lines = lines
+    else
+      @message = Message.new(self, @font, lines)
+    end
+  end
+
+  def message_drawn?; @message.try(:drawn?); end
+
+  # Ensure the message is drawn at least once
+  def display_message!(*lines)
+    display_message(*lines)
+    sleep 0.01 until message_drawn?
+  end
+
+  def clear_message
+    @message = nil
+  end
+
+  def build_top_menu
+    @top_menu = MenuItem.new('Click for menu', self, @font) { main_menu }
+  end
+
+  def main_menu
+    Menu.new('Main menu', self, @font,
+      MenuItem.new('Object creation', self, @font) { object_creation_menu },
+      MenuItem.new('Quit!', self, @font) { shutdown }
+    )
+  end
+
+  def object_creation_menu
     snap_text = lambda do |item|
       @local[:create_npc][:snap] ? "Turn snap off" : "Turn snap on"
     end
 
-    object_type_submenus = [
+    Menu.new('Object creation', self, @font,
+      MenuItem.new('Object type', self, @font) { object_type_menu },
+      MenuItem.new(snap_text, self, @font) do
+        @local[:create_npc][:snap] = !@local[:create_npc][:snap]
+      end,
+      MenuItem.new('Save!', self, @font) { @conn.send_save }
+    )
+  end
+
+  def object_type_menu
+    Menu.new('Object type', self, @font, *object_type_submenus)
+  end
+
+  def object_type_submenus
+    [
       ['Dirt',       'Entity::Block',    5],
       ['Brick',      'Entity::Block',    10],
       ['Cement',     'Entity::Block',    15],
@@ -70,29 +136,6 @@ class GameWindow < Gosu::Window
         @local[:create_npc][:hp] = hp
       end
     end
-    object_type_menu = Menu.new('Object type', self, @font,
-      *object_type_submenus)
-
-    object_creation_menu = Menu.new('Object creation', self, @font,
-      MenuItem.new('Object type', self, @font) { object_type_menu },
-      MenuItem.new(snap_text, self, @font) do
-        @local[:create_npc][:snap] = !@local[:create_npc][:snap]
-      end,
-      MenuItem.new('Save!', self, @font) { @conn.send_save }
-    )
-    main_menu = Menu.new('Main menu', self, @font,
-      MenuItem.new('Object creation', self, @font) { object_creation_menu },
-      MenuItem.new('Quit!', self, @font) { shutdown }
-    )
-    @menu = @top_menu = MenuItem.new('Click for menu', self, @font) { main_menu }
-
-    # Connect to server and kick off handshaking
-    # We will create our player object only after we've been accepted by the server
-    # and told our starting position
-    @conn = ClientConnection.new(hostname, port, self, player_name)
-    @engine = @conn.engine = ClientEngine.new(self)
-    @run_start = Time.now.to_f
-    @update_count = 0
   end
 
   def media(filename)
@@ -110,6 +153,8 @@ class GameWindow < Gosu::Window
   def update
     @update_count += 1
 
+    return unless @conn.online?
+
     # Handle any pending ENet events
     before_t = Time.now.to_f
     @conn.update
@@ -118,7 +163,7 @@ class GameWindow < Gosu::Window
       @conn_update_count += 1
       $stderr.puts "@conn.update() averages #{@conn_update_total / @conn_update_count} seconds each" if (@conn_update_count % 60) == 0
     end
-    return unless @conn.online? && @engine
+    return unless @engine.world_established?
 
     before_t = Time.now.to_f
     @engine.update
@@ -137,7 +182,18 @@ class GameWindow < Gosu::Window
 
   def draw
     @background_image.draw(0, 0, ZOrder::Background)
+    @message.draw if @message
+    @menu.draw if @menu
+
+    cursor_img = @cursor_anim[Gosu::milliseconds / 50 % @cursor_anim.size]
+    cursor_img.draw(
+      mouse_x - cursor_img.width / 2.0,
+      mouse_y - cursor_img.height / 2.0,
+      ZOrder::Cursor,
+      1, 1, Gosu::Color::WHITE, :add)
+
     return unless @player_id
+
     @camera_x, @camera_y = space.good_camera_position_for(player, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-@camera_x, -@camera_y) do
       (space.players + space.npcs).each {|entity| entity.draw(self) }
@@ -146,15 +202,6 @@ class GameWindow < Gosu::Window
     space.players.sort.each_with_index do |player, num|
       @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::Text, 1.0, 1.0, Gosu::Color::YELLOW)
     end
-
-    @menu.draw
-
-    cursor_img = @cursor_anim[Gosu::milliseconds / 50 % @cursor_anim.size]
-    cursor_img.draw(
-      mouse_x - cursor_img.width / 2.0,
-      mouse_y - cursor_img.height / 2.0,
-      ZOrder::Cursor,
-      1, 1, Gosu::Color::WHITE, :add)
   end
 
   def draw_box_at(x1, y1, x2, y2, c)

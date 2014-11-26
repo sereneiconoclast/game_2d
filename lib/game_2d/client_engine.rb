@@ -43,6 +43,8 @@ class ClientEngine
     create_initial_space(at_tick, highest_id)
   end
 
+  alias :world_established? :tick
+
   def create_initial_space(at_tick, highest_id)
     @earliest_tick = @tick = at_tick
     space = @spaces[@tick] = GameSpace.new.establish_world(@world_name, @world_id, @width, @height)
@@ -69,7 +71,7 @@ class ClientEngine
   end
 
   def update
-    return unless @tick # handshake not yet answered
+    return unless world_established?
 
     # Display the frame we received from the server as-is
     if @preprocessed == @tick
@@ -215,6 +217,7 @@ class ClientEngine
   # Discard anything we think we know, in favor of the registry
   # we just got from the server
   def sync_registry(server_registry, highest_id, at_tick)
+    return unless world_established?
     @spaces.clear
     # Any older deltas are now irrelevant
     @earliest_tick.upto(at_tick - 1) {|old_tick| @deltas.delete old_tick}

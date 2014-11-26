@@ -1,10 +1,15 @@
 require 'json'
+require 'base64'
+require 'openssl'
 require 'game_2d/hash'
+require 'game_2d/encryption'
 
 # An instance of this class is created by ServerPort whenever an
 # incoming connection is accepted.
 
 class ServerConnection
+  include Encryption
+  include Base64
 
   def initialize(port, game, server, id, remote_addr)
     @port, @game, @server, @id, @remote_addr = port, game, server, id, remote_addr
@@ -12,8 +17,29 @@ class ServerConnection
   end
 
   def answer_handshake(handshake)
-    player_name = handshake[:player_name]
-    player = @game.add_player(player_name)
+    @player_name = handshake[:player_name]
+    dh_public_key = handshake[:dh_public_key]
+    client_public_key = handshake[:client_public_key]
+    dh = OpenSSL::PKey::DH.new(dh_public_key)
+    dh.generate_key!
+    self.key = dh.compute_key(OpenSSL::BN.new client_public_key)
+    response = {
+      :server_public_key => dh.pub_key.to_s
+    }
+    send_record response, true # answer reliably
+  end
+
+  def answer_login(b64_password, b64_iv)
+    password = decrypt(
+      strict_decode64(b64_password),
+      strict_decode64(b64_iv))
+    unless password == "swordfish"
+      $stderr.puts "Wrong password for @player_name"
+      disconnect!
+      return
+    end
+
+    player = @game.add_player(@player_name)
     @player_id = player.registry_id
     @port.register_player @player_id, self
 
@@ -31,7 +57,7 @@ class ServerConnection
       :at_tick => @game.tick,
     }
     puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
-    send_record response, true # answer handshake reliably
+    send_record response, true # answer login reliably
   end
 
   def player
@@ -64,6 +90,7 @@ class ServerConnection
   end
 
   def close
+    return unless @player_id
     @port.deregister_player @player_id
     toast = player
     puts "#{toast} -- #{@remote_addr} disconnected at <#{@game.tick}>"
@@ -75,6 +102,8 @@ class ServerConnection
     debug_packet('Received', hash)
     if (handshake = hash[:handshake])
       answer_handshake(handshake)
+    elsif (password = hash[:password])
+      answer_login(password, hash[:iv])
     elsif (hash[:save])
       @game.save
     elsif (ping = hash[:ping])
@@ -100,5 +129,9 @@ class ServerConnection
     at_tick = hash[:at_tick] || 'NO TICK'
     keys = hash.keys - [:at_tick]
     puts "#{direction} #{keys.join(', ')} <#{at_tick}>"
+  end
+
+  def disconnect!
+    @server.disconnect_client(@id)
   end
 end

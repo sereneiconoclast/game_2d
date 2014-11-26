@@ -9,7 +9,7 @@ class Menu
     @right = window.width - 1
     @choices.each_with_index do |choice, num|
       choice.x = @right
-      choice.y = (num + 2) * 20
+      choice.y = (num + 2) * @font.height
     end
   end
 
@@ -17,7 +17,7 @@ class Menu
     str = to_s
     @font.draw_rel(str, @window.width - 1, 0, ZOrder::Text, 1.0, 0.0, 1.0, 1.0,
       @main_color)
-    x1, x2, y, c = @right - @font.text_width(str), @right, 20, @main_color
+    x1, x2, y, c = @right - @font.text_width(str), @right, @font.height, @main_color
     @window.draw_box_at(x1, y, x2, y+1, @main_color)
     @choices.each(&:draw)
   end
@@ -53,7 +53,7 @@ class MenuItem
   def left; @x - @font.text_width(to_s); end
   def right; @x; end
   def top; @y; end
-  def bottom; @y + 20; end
+  def bottom; @y + @font.height; end
 
   def draw
     selected = mouse_over?
