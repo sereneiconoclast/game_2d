@@ -9,6 +9,10 @@ require 'game_2d/client_connection'
 require 'game_2d/client_engine'
 require 'game_2d/game_space'
 require 'game_2d/entity'
+require 'game_2d/entity/block'
+require 'game_2d/entity/titanium'
+require 'game_2d/entity/teleporter'
+require 'game_2d/entity/destination'
 require 'game_2d/player'
 require 'game_2d/menu'
 require 'game_2d/message'
@@ -63,6 +67,8 @@ class GameWindow < Gosu::Window
         :snap => false,
       },
     }
+
+    @grabbed_entity_id = nil
 
     @run_start = Time.now.to_f
     @update_count = 0
@@ -124,16 +130,18 @@ class GameWindow < Gosu::Window
 
   def object_type_submenus
     [
-      ['Dirt',       'Entity::Block',    5],
-      ['Brick',      'Entity::Block',    10],
-      ['Cement',     'Entity::Block',    15],
-      ['Steel',      'Entity::Block',    20],
-      ['Unlikelium', 'Entity::Block',    25],
-      ['Titanium',   'Entity::Titanium', 0]
+      ['Dirt',        'Entity::Block',       5],
+      ['Brick',       'Entity::Block',      10],
+      ['Cement',      'Entity::Block',      15],
+      ['Steel',       'Entity::Block',      20],
+      ['Unlikelium',  'Entity::Block',      25],
+      ['Titanium',    'Entity::Titanium',    0],
+      ['Teleporter',  'Entity::Teleporter',  0],
+      ['Destination', 'Entity::Destination', 0],
     ].collect do |type_name, class_name, hp|
       MenuItem.new(type_name, self, @font) do |item|
         @local[:create_npc][:type] = class_name
-        @local[:create_npc][:hp] = hp
+        @local[:create_npc][:hp] = hp if hp
       end
     end
   end
@@ -176,6 +184,13 @@ class GameWindow < Gosu::Window
     # Player at the keyboard queues up a command
     # @pressed_buttons is emptied by handle_input
     handle_input if @player_id
+
+    if @grabbed_entity_id && (grabbed = space[@grabbed_entity_id])
+      dest_x, dest_y = mouse_entity_location
+      vel_x = Entity.constrain_velocity(dest_x - grabbed.x)
+      vel_y = Entity.constrain_velocity(dest_y - grabbed.y)
+      @conn.send_update_entity(grabbed.as_json.merge! :velocity => [vel_x, vel_y], :moving => true)
+    end
 
     $stderr.puts "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile
   end
@@ -229,7 +244,11 @@ class GameWindow < Gosu::Window
           send_fire
         end
       when Gosu::MsRight then # right-click
-        send_create_npc
+        if button_down?(Gosu::KbRightShift) || button_down?(Gosu::KbLeftShift)
+          send_create_npc
+        else
+          toggle_grab
+        end
       else @pressed_buttons << id unless @dialog
     end
   end
@@ -251,28 +270,34 @@ class GameWindow < Gosu::Window
     ]
   end
 
-  def send_create_npc
+  def mouse_entity_location
     x, y = mouse_coords
 
     if @local[:create_npc][:snap]
-      # When snap is on, we want the upper-left corner of the cell we clicked in
-      x = (x / Entity::WIDTH) * Entity::WIDTH
-      y = (y / Entity::HEIGHT) * Entity::HEIGHT
+      # When snap is on, we want the upper-left corner of the cell we point at
+      return (x / Entity::WIDTH) * Entity::WIDTH, (y / Entity::HEIGHT) * Entity::HEIGHT
     else
-      # When snap is off, we want the click to be the new entity's center, not
+      # When snap is off, we are pointing at the entity's center, not
       # its upper-left corner
-      x -= Entity::WIDTH / 2
-      y -= Entity::HEIGHT / 2
+      return x - Entity::WIDTH / 2, y - Entity::HEIGHT / 2
     end
+  end
 
+  def send_create_npc
     @conn.send_create_npc(
       :class => @local[:create_npc][:type],
-      :position => [x, y],
+      :position => mouse_entity_location,
       :velocity => [0, 0],
       :angle => 0,
       :moving => true,
       :hp => @local[:create_npc][:hp]
     )
+  end
+
+  def toggle_grab
+    return @grabbed_entity_id = nil if @grabbed_entity_id
+
+    @grabbed_entity_id = space.near_to(*mouse_coords).nullsafe_registry_id
   end
 
   def shutdown
@@ -287,9 +312,8 @@ class GameWindow < Gosu::Window
     @conn.send_move move # also creates a delta in the engine
   end
 
-  # Check keyboard, return a motion symbol or nil
-  #
-  #
+  # Check keyboard, mouse, and pressed-button queue
+  # Return a motion symbol or nil
   def move_for_keypress
     # Generated once for each keypress
     until @pressed_buttons.empty?

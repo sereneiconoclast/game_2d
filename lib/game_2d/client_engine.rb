@@ -41,6 +41,7 @@ class ClientEngine
     @width, @height = world[:cell_width], world[:cell_height]
     highest_id = world[:highest_id]
     create_initial_space(at_tick, highest_id)
+    @preprocessed = at_tick
   end
 
   alias :world_established? :tick

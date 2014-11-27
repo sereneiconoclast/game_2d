@@ -16,6 +16,8 @@ class ServerConnection
     puts "ServerConnection: New connection #{id} from #{remote_addr}"
   end
 
+  attr_reader :player_id
+
   def answer_handshake(handshake)
     @player_name = handshake[:player_name]
     dh_public_key = handshake[:dh_public_key]
@@ -47,22 +49,11 @@ class ServerConnection
     player = @game.add_player(@player_name)
     @player_id = player.registry_id
     @port.register_player @player_id, self
-
-    response = {
-      :you_are => @player_id,
-      :world => {
-        :world_name => @game.world_name,
-        :world_id => @game.world_id,
-        :highest_id => @game.world_highest_id,
-        :cell_width => @game.world_cell_width,
-        :cell_height => @game.world_cell_height,
-      },
-      :add_players => @game.get_all_players,
-      :add_npcs => @game.get_all_npcs,
-      :at_tick => @game.tick,
-    }
     puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
-    send_record response, true # answer login reliably
+
+    # We don't send the registry here.  The Game will do it after
+    # all logins have been processed and the update has completed.
+    # Otherwise, we're sending an incomplete frame.
   end
 
   def player

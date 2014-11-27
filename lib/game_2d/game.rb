@@ -112,11 +112,15 @@ class Game
     player_id_connection(player.registry_id)
   end
 
+  def each_player_conn
+    get_all_players.each {|p| yield player_connection(p)}
+  end
+
   def delete_entity(entity)
     puts "Deleting #{entity}"
     @space.doom entity
     @space.purge_doomed_entities
-    @space.players.each {|player| player_connection(player).delete_entity entity, @tick }
+    each_player_conn {|pc| pc.delete_entity entity, @tick }
   end
 
   # Answering request from client
@@ -127,11 +131,23 @@ class Game
   def add_npc(npc)
     @space << npc or return
     puts "Created #{npc}"
-    @space.players.each {|p| player_connection(p).add_npc npc, @tick }
+    each_player_conn {|pc| pc.add_npc npc, @tick }
+  end
+
+  def update_npcs(npcs_json)
+    npcs_json.each do |json|
+      id = json[:registry_id]
+      if entity = @space[id]
+        entity.update_from_json json
+        entity.grab!
+      else
+        $stderr.puts "Can't update #{id}, doesn't exist"
+      end
+    end
   end
 
   def send_updated_entities(*entities)
-    @space.players.each {|p| player_connection(p).update_entities entities, @tick }
+    each_player_conn {|pc| pc.update_entities entities, @tick }
   end
 
   def [](id)
@@ -171,6 +187,8 @@ class Game
           player.add_move move
         elsif (npc = action[:create_npc])
           create_npc npc
+        elsif (entities = action[:update_entities])
+          update_npcs entities
         else
           $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
         end
@@ -184,7 +202,7 @@ class Game
     # This will:
     # 1) Queue up player actions for existing players
     #    (create_npc included)
-    # 2) Add new players in response to handshake messages
+    # 2) Add new players in response to login messages
     # 3) Remove players in response to disconnections
     @port.update
 
@@ -192,18 +210,51 @@ class Game
     process_player_actions
 
     # Objects that exist by now will be updated
-    # Objects created during this tick won't be updated this tick
+    # Objects created during this update won't be updated
+    # themselves this tick
     @space.update
 
-    @port.broadcast(
-      :registry => @space.all_registered,
-      :highest_id => @space.highest_id,
-      :at_tick => @tick
-    ) if @registry_broadcast_every > 0 && (@tick % @registry_broadcast_every == 0)
+    # Do this at the end, so the update contains all the
+    # latest and greatest news
+    send_full_updates
 
     if @self_check
       @space.check_for_grid_corruption
       @space.check_for_registry_leaks
+    end
+  end
+
+  # New players always get a full update (with some additional
+  # information)
+  # Everyone else gets full registry dump every N ticks, where
+  # N == @registry_broadcast_every
+  def send_full_updates
+    # Set containing brand-new players' IDs
+    new_players = @port.new_players
+
+    each_player_conn do |pc|
+      if new_players.include? pc.player_id
+        response = {
+          :you_are => pc.player_id,
+          :world => {
+            :world_name => world_name,
+            :world_id => world_id,
+            :highest_id => world_highest_id,
+            :cell_width => world_cell_width,
+            :cell_height => world_cell_height,
+          },
+          :add_players => get_all_players,
+          :add_npcs => get_all_npcs,
+          :at_tick => tick,
+        }
+        pc.send_record response, true # answer login reliably
+      elsif @registry_broadcast_every > 0 && (@tick % @registry_broadcast_every == 0)
+        pc.send_record( {
+          :registry => @space.all_registered,
+          :highest_id => @space.highest_id,
+          :at_tick => @tick,
+        }, false, 1 )
+      end
     end
   end
 

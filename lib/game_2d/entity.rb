@@ -3,6 +3,7 @@ require 'facets/kernel/constant'
 require 'game_2d/registerable'
 require 'game_2d/serializable'
 require 'game_2d/entity_constants'
+require 'game_2d/transparency'
 
 class NilClass
   # Ignore this
@@ -10,9 +11,35 @@ class NilClass
 end
 
 class Entity
+  include EntityConstants
+
+  module ClassMethods
+    include EntityConstants
+    # Left-most cell X position occupied
+    def left_cell_x_at(x); x / WIDTH; end
+
+    # Right-most cell X position occupied
+    # If we're exactly within a column (@x is an exact multiple of WIDTH),
+    # then this equals left_cell_x.  Otherwise, it's one higher
+    def right_cell_x_at(x); (x + WIDTH - 1) / WIDTH; end
+
+    # Top-most cell Y position occupied
+    def top_cell_y_at(y); y / HEIGHT; end
+
+    # Bottom-most cell Y position occupied
+    def bottom_cell_y_at(y); (y + HEIGHT - 1) / HEIGHT; end
+
+    # Velocity is constrained to the range -MAX_VELOCITY .. MAX_VELOCITY
+    def constrain_velocity(vel)
+      [[vel, MAX_VELOCITY].min, -MAX_VELOCITY].max
+    end
+  end
+  include ClassMethods
+  extend ClassMethods
+
   include Serializable
   include Registerable
-  include EntityConstants
+  include Transparency
 
   # X and Y position of the top-left corner
   attr_accessor :x, :y, :moving, :space
@@ -27,16 +54,16 @@ class Entity
     @x, @y, self.a = x, y, a
     self.x_vel, self.y_vel = x_vel, y_vel
     @moving = true
+    @grabbed = false
   end
 
   def a=(angle); @a = angle % 360; end
 
-  # Velocity is constrained to the range -MAX_VELOCITY .. MAX_VELOCITY
   def x_vel=(xv)
-    @x_vel = [[xv, MAX_VELOCITY].min, -MAX_VELOCITY].max
+    @x_vel = constrain_velocity xv
   end
   def y_vel=(yv)
-    @y_vel = [[yv, MAX_VELOCITY].min, -MAX_VELOCITY].max
+    @y_vel = constrain_velocity yv
   end
 
   # True if we need to update this entity
@@ -60,6 +87,12 @@ class Entity
     @moving = true
   end
 
+  # Entity is under direct control by a player
+  # This is transitory state (not persisted or copied)
+  def grab!; @grabbed = true; end
+  def release!; @grabbed = false; end
+  def grabbed?; @grabbed; end
+
   # Give this entity a chance to perform clean-up upon destruction
   def destroy!; end
 
@@ -68,24 +101,10 @@ class Entity
   def pixel_x; @x / PIXEL_WIDTH; end
   def pixel_y; @y / PIXEL_WIDTH; end
 
-  # Left-most cell X position occupied
-  def self.left_cell_x_at(x); x / WIDTH; end
-  # TODO: Find a more elegant way to call class methods in Ruby...
-  def left_cell_x(x = @x); self.class.left_cell_x_at(x); end
-
-  # Right-most cell X position occupied
-  # If we're exactly within a column (@x is an exact multiple of WIDTH),
-  # then this equals left_cell_x.  Otherwise, it's one higher
-  def self.right_cell_x_at(x); (x + WIDTH - 1) / WIDTH; end
-  def right_cell_x(x = @x); self.class.right_cell_x_at(x); end
-
-  # Top-most cell Y position occupied
-  def self.top_cell_y_at(y); y / HEIGHT; end
-  def top_cell_y(y = @y); self.class.top_cell_y_at(y); end
-
-  # Bottom-most cell Y position occupied
-  def self.bottom_cell_y_at(y); (y + HEIGHT - 1) / HEIGHT; end
-  def bottom_cell_y(y = @y); self.class.bottom_cell_y_at(y); end
+  def left_cell_x(x = @x); left_cell_x_at(x); end
+  def right_cell_x(x = @x); right_cell_x_at(x); end
+  def top_cell_y(y = @y); top_cell_y_at(y); end
+  def bottom_cell_y(y = @y); bottom_cell_y_at(y); end
 
   # Returns an array of one, two, or four cell-coordinate tuples
   # E.g. [[4, 5], [4, 6], [5, 5], [5, 6]]
@@ -101,13 +120,8 @@ class Entity
     self.y_vel = @y_vel + y_accel
   end
 
-  # Override to make particular entities transparent to each other
-  def transparent_to_me?(other)
-    other == self
-  end
-
   def opaque(others)
-    others.delete_if {|obj| transparent_to_me?(obj)}
+    others.delete_if {|obj| obj.equal?(self) || transparent?(self, obj)}
   end
 
   # Wrapper around @space.entities_overlapping

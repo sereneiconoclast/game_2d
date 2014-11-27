@@ -45,12 +45,6 @@ class Block < OwnedEntity
     move
   end
 
-  def transparent_to_me?(other)
-    super ||
-    (other.registry_id == owner_id) ||
-    (other.is_a?(Pellet) && other.owner_id == owner_id)
-  end
-
   def harmed_by(other)
     puts "#{self}: Ouch!"
     self.hp -= 1

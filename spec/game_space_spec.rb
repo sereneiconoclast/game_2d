@@ -1,6 +1,5 @@
 require 'set'
-$LOAD_PATH << '.'
-require 'game_space'
+require 'game_2d/game_space'
 
 describe GameSpace do
   subject { GameSpace.new(nil).establish_world('lump', nil, 3, 3) }

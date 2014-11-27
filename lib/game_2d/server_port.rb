@@ -1,3 +1,4 @@
+require 'set'
 require 'renet'
 require 'json'
 require 'game_2d/server_connection'
@@ -10,6 +11,7 @@ class ServerPort
 
     @clients = {}
     @player_connections = {}
+    @new_players = Set.new
 
     @server.on_connection method(:on_connection)
     @server.on_packet_receive method(:on_packet_receive)
@@ -36,17 +38,19 @@ class ServerPort
     puts "Remaining connection IDs: #{@clients.keys.sort.join(', ')}"
   end
 
-  def broadcast(data, reliable=false, channel=1)
-    @server.broadcast_packet data.to_json, reliable, channel
-    @server.flush
-  end
-
   def register_player(player_id, conn)
     @player_connections[player_id] = conn
+    @new_players << player_id
   end
 
   def deregister_player(player_id)
     @player_connections.delete player_id
+  end
+
+  def new_players
+    copy = @new_players.dup
+    @new_players.clear
+    copy
   end
 
   def player_connection(player_id)

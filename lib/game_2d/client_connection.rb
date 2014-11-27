@@ -138,6 +138,13 @@ class ClientConnection
     @engine.add_delta delta
   end
 
+  def send_update_entity(entity)
+    return unless online?
+    delta = { :update_entities => [entity], :at_tick => send_actions_at }
+    send_record delta
+    @engine.add_delta delta
+  end
+
   def send_save
     send_record :save => true
   end

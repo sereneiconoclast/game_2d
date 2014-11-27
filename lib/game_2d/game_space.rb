@@ -1,6 +1,7 @@
 require 'securerandom'
 require 'delegate'
 require 'set'
+require 'facets/kernel/try'
 require 'game_2d/wall'
 require 'game_2d/player'
 require 'game_2d/serializable'
@@ -263,6 +264,18 @@ class GameSpace
     end
   end
 
+  # Return whichever entity's center is closest (or ties for closest)
+  def near_to(x, y)
+    entities_at_point(x, y).collect do |entity|
+      center_x = entity.x + Entity::WIDTH/2
+      center_y = entity.y + Entity::HEIGHT/2
+      delta_x = (center_x - x).abs
+      delta_y = (center_y - y).abs
+      distance = Math.sqrt(delta_x**2 + delta_y**2)
+      [distance, entity]
+    end.sort {|(d1, e1), (d2, e2)| d1 <=> d2}.first.try(:last)
+  end
+
   # Accepts a collection of (x, y)
   # Returns a Set of entities
   def entities_at_points(coords)
@@ -393,7 +406,14 @@ class GameSpace
   end
 
   def update
-    @registry.values.find_all(&:moving?).each(&:update)
+    @registry.values.each do |ent|
+      if ent.grabbed?
+        ent.move
+        ent.release!
+      elsif ent.moving?
+        ent.update
+      end
+    end
     purge_doomed_entities
   end
 

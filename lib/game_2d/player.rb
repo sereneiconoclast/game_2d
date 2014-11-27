@@ -56,13 +56,6 @@ class Player < Entity
     build_block.owner_id = nil if building?
   end
 
-  # Pellets don't hit the originating player
-  def transparent_to_me?(other)
-    super ||
-    (other == build_block) ||
-    (other.is_a?(Pellet) && other.owner == self)
-  end
-
   def update
     fail "No space set for #{self}" unless @space
     check_for_disown_block
@@ -74,7 +67,7 @@ class Player < Entity
       @complex_move = nil
     end
 
-    underfoot = next_to(self.a + 180)
+    underfoot = opaque(next_to(self.a + 180))
     if @falling = underfoot.empty?
       self.a = 0
       accelerate(0, 1)

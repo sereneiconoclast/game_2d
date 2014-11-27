@@ -1,8 +1,7 @@
-$LOAD_PATH << '.'
-require 'game'
-require 'server_port'
-require 'client_engine'
-require 'client_connection'
+require 'game_2d/game'
+require 'game_2d/server_port'
+require 'game_2d/client_engine'
+require 'game_2d/client_connection'
 
 IP_ADDRESS = '1.1.1.1'
 CONNECTION_ID = 666
@@ -61,9 +60,12 @@ class FakeENetConnection
   def initialize(*args)
     $stderr.puts "FakeENetConnection.new(#{args.inspect})"
     @queue = []
+    @online = false
   end
+  def online?; @online; end
   def connect(timeout)
     $stderr.puts "FakeENetConnection.connect(#{timeout})"
+    @online = true
     $fake_server_port.on_connection(CONNECTION_ID, IP_ADDRESS)
     $fake_client_conn.on_connect
   end
@@ -104,7 +106,7 @@ class FakeGameWindow
   attr_accessor :player_id, :conn, :engine
 
   def initialize(host, port, player_name)
-    @conn = FakeClientConnection.new(host, port, self, player_name)
+    @conn = FakeClientConnection.new(host, port, self, player_name, 128)
     @conn.engine = @engine = ClientEngine.new(self)
   end
 
@@ -124,6 +126,10 @@ class FakeGameWindow
   def generate_move(move)
     @conn.send_move move
   end
+
+  def display_message(*args); end
+  def display_message!(*args); end
+  def clear_message(*args); end
 end
 
 describe FakeGame do
@@ -137,6 +143,8 @@ describe FakeGame do
   let(:cell_height) { 3 }
   let(:self_check) { false }
   let(:profile) { false }
+  let(:registry_broadcast_every) { nil }
+  let(:password_hash) { "0123456789abcdef" }
 
   let(:game) { FakeGame.new(
     :port                     => port_number,
@@ -149,87 +157,126 @@ describe FakeGame do
     :profile                  => profile,
     :registry_broadcast_every => registry_broadcast_every
   ) }
-  let(:window) { game; FakeGameWindow.new(hostname, port_number, player_name) }
+  let(:window) {
+    game
+    w = FakeGameWindow.new(hostname, port_number, player_name)
+    w.conn.start(password_hash).join
+    w
+  }
 
   def update_both
     game.update
+#   $stderr.puts "SERVER TICK #{game.tick}"
     window.update
   end
 
+# require 'pry'
   def expect_spaces_to_match
+#   [
+#     game.space, window.space,
+#     game.space.instance_variable_get(:@grid),
+#     window.space.instance_variable_get(:@grid)
+#   ].pry unless window.space == game.space
     expect(window.space).to eq(game.space)
   end
 
-  context "with default registry syncs" do
-    let(:registry_broadcast_every) { nil }
-    it "is in sync after one update" do
-      window
+  it "is in sync after one update" do
+    window
 
+    # server sends its public key
+    # client sends encrypted password hash
+    update_both
+    expect(window.space).to be_nil
+
+    # server sends response to login
+    update_both
+
+    expect(game.tick).to eq(window.engine.tick)
+    expect_spaces_to_match
+  end
+
+  def player_on_server
+    game.space.players.first
+  end
+
+  it "is in sync after a fall and a build" do
+    window
+
+    expect(game.tick).to eq(-1)
+    expect(window.engine.tick).to be_nil
+
+    # server sends its public key
+    # client sends encrypted password hash
+    update_both
+    expect(window.space).to be_nil
+
+    # server sends response to login in time for tick 1
+    28.times do |n|
       update_both
-
+      expect(game.tick).to eq(n+1)
+      expect(window.engine.tick).to eq(n+1)
       expect_spaces_to_match
     end
-    it "is in sync after a fall and a build" do
-      window
 
-      expect(game.tick).to eq(-1)
-      expect(window.engine.tick).to be_nil
+    expect(game.space.players.size).to eq(1)
+    expect(game.space.npcs.size).to eq(0)
 
-      28.times do |n|
-        update_both
-        expect(game.tick).to eq(n)
-        expect(window.engine.tick).to eq(n)
-        expect_spaces_to_match
-      end
+    plr = player_on_server
+    expect(plr.y).to eq(800)
 
-      expect(game.space.players.size).to eq(1)
+    # Command generated at tick 28, scheduled for tick 34
+    window.generate_move :build
+
+    5.times do # ticks 29 - 33
+      update_both
+      expect_spaces_to_match
       expect(game.space.npcs.size).to eq(0)
+    end
 
-      plr = game.space.players.first
+    # tick 34
+    update_both
+    expect(game.tick).to eq(34)
+    expect(game.space.npcs.size).to eq(1)
+
+    expect_spaces_to_match
+
+    # Command generated at tick 34, scheduled for tick 40
+    window.generate_move :rise_up
+    5.times do # ticks 35 - 39
+      update_both
+      expect_spaces_to_match
       expect(plr.y).to eq(800)
-
-      # Command generated at tick 27, scheduled for tick 33
-      window.generate_move :build
-
-      5.times do # ticks 28 - 32
-        update_both
-        expect_spaces_to_match
-        expect(game.space.npcs.size).to eq(0)
-      end
-
-      # tick 33
-      update_both
-      expect(game.tick).to eq(33)
-      expect(game.space.npcs.size).to eq(1)
-
-      expect_spaces_to_match
-
-      # Command generated at tick 33, scheduled for tick 39
-      window.generate_move :rise_up
-      5.times do # ticks 34 - 38
-        update_both
-        $stderr.puts "TICK ##{game.tick}"
-        expect_spaces_to_match
-        expect(plr.y).to eq(800)
-      end
-      41.times do |n| # ticks 39 - 79
-        update_both
-        $stderr.puts "TICK ##{game.tick}"
-        expect(plr.y).to eq(800 - (10 * n))
-        cplr = window.engine.space.players.first
-        binding.pry unless cplr == plr
-        expect(cplr).to eq(plr)
-        expect_spaces_to_match
-      end
     end
-  end
-  context "with no registry syncs" do
-    let(:registry_broadcast_every) { 0 }
-    it "is in sync after one update" do
-      window
+    41.times do |n| # ticks 40 - 80
       update_both
-
+      expect(plr.y).to eq(800 - (10 * n))
+      cplr = window.engine.space.players.first
+      binding.pry unless cplr == plr
+      expect(cplr).to eq(plr)
       expect_spaces_to_match
     end
   end
+
+  it "stays in sync during a block-move" do
+    window
+    update_both
+    loop do
+      update_both
+      break if player_on_server.y == 800
+    end
+
+    window.generate_move :build
+
+    30.times do
+      update_both
+      window.generate_move :slide_left
+    end
+    loop do
+      update_both
+      break if player_on_server.x == 0
+    end
+    expect_spaces_to_match
+
+  end
+
 end
