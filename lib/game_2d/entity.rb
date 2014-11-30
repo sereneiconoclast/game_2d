@@ -210,7 +210,8 @@ class Entity
   def warp(x, y, x_vel, y_vel, angle=self.a, moving=@moving)
     blk = proc do
       @x, @y, self.x_vel, self.y_vel, self.a, @moving =
-        x, y, x_vel, y_vel, angle, moving
+        (x || @x), (y || @y), (x_vel || @x_vel), (y_vel || @y_vel), (angle || @a),
+        (moving.nil? ? @moving : moving)
     end
     if @space
       @space.process_moving_entity(self, &blk)

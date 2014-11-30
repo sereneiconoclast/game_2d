@@ -305,15 +305,21 @@ describe FakeGame do
     window.release_button! Gosu::MsRight
     expect_spaces_to_match
 
-    10.times do
+    in_a_row = 0
+    99.times do |n|
       update_both
       expect_spaces_to_match
-      blk = window.engine.space.npcs.first
-      $stderr.puts "blk is at #{blk.x},#{blk.y} moving #{blk.x_vel},#{blk.y_vel}"
-    end
 
-    blk = window.engine.space.npcs.first
-    expect([blk.x, blk.y]).to eq([300,700])
+      blk = window.engine.space.npcs.first
+      $stderr.puts "step ##{n}: blk is at #{blk.x},#{blk.y} moving #{blk.x_vel},#{blk.y_vel}"
+      if blk.x == 400 && blk.y == 700
+        in_a_row += 1
+      else
+        in_a_row = 0
+      end
+      break if in_a_row > 3
+    end
+    expect(in_a_row).to eq(4)
   end
 
 end

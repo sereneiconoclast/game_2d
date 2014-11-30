@@ -21,7 +21,7 @@ class OwnedEntity < Entity
   def all_state; super.push(owner_id); end
   def as_json; super.merge! :owner => owner_id; end
   def update_from_json(json)
-    self.owner_id = json[:owner]
+    self.owner_id = json[:owner] if json[:owner]
     super
   end
 end

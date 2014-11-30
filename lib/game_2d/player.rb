@@ -227,10 +227,10 @@ class Player < Entity
   end
 
   def update_from_json(json)
-    @player_name = json[:player_name]
-    @score = json[:score]
-    @build_block_id = json[:build_block].try(:to_sym)
-    @complex_move = Serializable.from_json(json[:complex_move])
+    @player_name = json[:player_name] if json[:player_name]
+    @score = json[:score] if json[:score]
+    @build_block_id = json[:build_block].try(:to_sym) if json[:build_block]
+    @complex_move = Serializable.from_json(json[:complex_move]) if json[:complex_move]
     super
   end
 

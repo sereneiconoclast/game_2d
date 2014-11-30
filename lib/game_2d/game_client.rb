@@ -196,9 +196,9 @@ module GameClient
 
     if @grabbed_entity_id && (grabbed = space[@grabbed_entity_id])
       dest_x, dest_y = mouse_entity_location
-      vel_x = Entity.constrain_velocity(dest_x - grabbed.x)
-      vel_y = Entity.constrain_velocity(dest_y - grabbed.y)
-      @conn.send_update_entity(grabbed.as_json.merge! :velocity => [vel_x, vel_y], :moving => true)
+      vel_x = Entity.constrain_velocity((dest_x - grabbed.x) / ClientConnection::ACTION_DELAY)
+      vel_y = Entity.constrain_velocity((dest_y - grabbed.y) / ClientConnection::ACTION_DELAY)
+      @conn.send_update_entity(:registry_id => grabbed.registry_id, :velocity => [vel_x, vel_y], :moving => true)
     end
 
     $stderr.puts "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile

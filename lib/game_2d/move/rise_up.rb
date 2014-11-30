@@ -64,8 +64,8 @@ class RiseUp < ComplexMove
       :distance => @distance
   end
   def update_from_json(json)
-    self.stage = json[:stage].to_sym
-    self.distance = json[:distance]
+    self.stage = json[:stage].to_sym if json[:stage]
+    self.distance = json[:distance] if json[:distance]
     super
   end
   def to_s

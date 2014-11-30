@@ -36,7 +36,7 @@ class ComplexMove
     Serializable.as_json(self).merge!(:actor_id => actor_id)
   end
   def update_from_json(json)
-    self.actor_id = json[:actor_id]
+    self.actor_id = json[:actor_id] if json[:actor_id]
     self
   end
   def to_s
