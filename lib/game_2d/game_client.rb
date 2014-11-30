@@ -287,7 +287,7 @@ module GameClient
 
   # Dequeue an input event
   def handle_input
-    return if player.falling?
+    return if player.falling? || @dialog
     move = move_for_keypress
     @conn.send_move move # also creates a delta in the engine
   end

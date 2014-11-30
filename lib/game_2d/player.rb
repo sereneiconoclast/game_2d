@@ -30,7 +30,6 @@ class Player < Entity
     @score = 0
     @moves = []
     @current_move = nil
-    @falling = false
     @build_block_id = nil
     @build_level = 0
     @complex_move = nil
@@ -38,7 +37,12 @@ class Player < Entity
 
   def sleep_now?; false; end
 
-  def falling?; @falling; end
+  def underfoot
+    opaque(next_to(self.a + 180))
+  end
+  def falling?
+    underfoot.empty?
+  end
 
   def build_block_id=(new_id)
     @build_block_id = new_id.try(:to_sym)
@@ -67,8 +71,7 @@ class Player < Entity
       @complex_move = nil
     end
 
-    underfoot = opaque(next_to(self.a + 180))
-    if @falling = underfoot.empty?
+    if falling = falling?
       self.a = 0
       accelerate(0, 1)
     end
@@ -76,7 +79,7 @@ class Player < Entity
     args = @moves.shift
     case (current_move = args.delete(:move).to_sym)
       when :slide_left, :slide_right, :brake, :flip, :build, :rise_up
-        send current_move unless @falling
+        send current_move unless falling
       when :fire
         fire args[:x_vel], args[:y_vel]
       else
@@ -84,8 +87,9 @@ class Player < Entity
     end if args
 
     # Only go around corner if sitting on exactly one object
-    if underfoot.size == 1
-      other = underfoot.first
+    blocks_underfoot = underfoot
+    if blocks_underfoot.size == 1
+      other = blocks_underfoot.first
       # Figure out where corner is and whether we're about to reach or pass it
       corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
       if corner

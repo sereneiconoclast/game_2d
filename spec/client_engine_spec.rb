@@ -107,10 +107,10 @@ end
 class FakeGameWindow
   include GameClient
   attr_accessor :player_id, :conn, :engine, :text_input
-  attr_reader :buttons_down
 
   def initialize(opts = {})
     initialize_from_hash(opts)
+    @dialog = nil
     @buttons_down = Set.new
   end
 
@@ -126,12 +126,16 @@ class FakeGameWindow
 
   def width; SCREEN_WIDTH; end
 
-  def button_down?(button)
-    @buttons_down.include?(button)
+  def press_button!(button)
+    @buttons_down << button
+    button_down(button)
+  end
+  def release_button!(button)
+    @buttons_down.delete button
   end
 
-  def generate_move(move)
-    @conn.send_move move
+  def button_down?(button)
+    @buttons_down.include?(button)
   end
 end
 
@@ -215,21 +219,24 @@ describe FakeGame do
     expect(window.space).to be_nil
 
     # server sends response to login in time for tick 1
-    28.times do |n|
+    27.times do |n|
       update_both
       expect(game.tick).to eq(n+1)
       expect(window.engine.tick).to eq(n+1)
       expect_spaces_to_match
     end
 
+    # Command generated at tick 28, scheduled for tick 34
+    window.press_button! Gosu::KbDown
+
+    update_both
+    expect_spaces_to_match
     expect(game.space.players.size).to eq(1)
     expect(game.space.npcs.size).to eq(0)
 
     plr = player_on_server
     expect(plr.y).to eq(800)
-
-    # Command generated at tick 28, scheduled for tick 34
-    window.generate_move :build
+    expect(plr.falling?).to be false
 
     5.times do # ticks 29 - 33
       update_both
@@ -238,20 +245,22 @@ describe FakeGame do
     end
 
     # tick 34
+    window.release_button! Gosu::KbDown
     update_both
     expect(game.tick).to eq(34)
     expect(game.space.npcs.size).to eq(1)
 
     expect_spaces_to_match
 
-    # Command generated at tick 34, scheduled for tick 40
-    window.generate_move :rise_up
-    5.times do # ticks 35 - 39
+    # Command generated at tick 35, scheduled for tick 41
+    window.press_button! Gosu::KbUp
+    6.times do # ticks 35 - 40
       update_both
       expect_spaces_to_match
       expect(plr.y).to eq(800)
     end
-    41.times do |n| # ticks 40 - 80
+    window.release_button! Gosu::KbUp
+    41.times do |n| # ticks 41 - 81
       update_both
       expect(plr.y).to eq(800 - (10 * n))
       cplr = window.engine.space.players.first
@@ -269,12 +278,15 @@ describe FakeGame do
       break if player_on_server.y == 800
     end
 
-    window.generate_move :build
+    window.press_button! Gosu::KbDown
+    update_both
+    window.release_button! Gosu::KbDown
+    window.press_button! Gosu::KbLeft
 
     30.times do
       update_both
-      window.generate_move :slide_left
     end
+    window.release_button! Gosu::KbLeft
     loop do
       update_both
       break if player_on_server.x == 0
