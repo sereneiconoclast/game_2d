@@ -106,10 +106,11 @@ end
 
 class FakeGameWindow
   include GameClient
-  attr_accessor :player_id, :conn, :engine, :text_input
+  attr_accessor :player_id, :conn, :engine, :text_input, :mouse_x, :mouse_y
 
   def initialize(opts = {})
     initialize_from_hash(opts)
+    @mouse_x = @mouse_y = @camera_x = @camera_y = 0
     @dialog = nil
     @buttons_down = Set.new
   end
@@ -293,6 +294,26 @@ describe FakeGame do
     end
     expect_spaces_to_match
 
+    blk = window.engine.space.npcs.first
+    expect([blk.x, blk.y]).to eq([400,800])
+
+    window.mouse_x, window.mouse_y = 50, 90
+    expect(window.mouse_entity_location).to eq([300, 700])
+
+    window.press_button! Gosu::MsRight
+    update_both
+    window.release_button! Gosu::MsRight
+    expect_spaces_to_match
+
+    10.times do
+      update_both
+      expect_spaces_to_match
+      blk = window.engine.space.npcs.first
+      $stderr.puts "blk is at #{blk.x},#{blk.y} moving #{blk.x_vel},#{blk.y_vel}"
+    end
+
+    blk = window.engine.space.npcs.first
+    expect([blk.x, blk.y]).to eq([300,700])
   end
 
 end

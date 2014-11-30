@@ -109,7 +109,7 @@ class ClientConnection
     if you_are
       # The 'world' response includes deltas for add_players and add_npcs
       # Need to process those first, as one of the players is us
-      @engine.apply_all_deltas(at_tick)
+      @engine.apply_deltas(at_tick)
 
       @engine.create_local_player you_are
     end

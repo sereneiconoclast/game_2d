@@ -61,12 +61,8 @@ class ClientEngine
     last_space = space_at(tick - 1)
     @spaces[tick] = new_space = GameSpace.new.copy_from(last_space)
 
-    # Certain deltas, like add_npcs, need to be processed post-update
-    # to match the server's behavior.  An object created during tick T
-    # does not receive its first update until T+1.
-    apply_deltas_before_update(tick)
+    apply_deltas(tick)
     new_space.update
-    apply_deltas_after_update(tick)
 
     new_space
   end
@@ -117,7 +113,7 @@ class ClientEngine
     @deltas[at_tick] << delta
   end
 
-  def apply_deltas_before_update(at_tick)
+  def apply_deltas(at_tick)
     space = space_at(at_tick)
 
     @deltas[at_tick].each do |hash|
@@ -130,29 +126,15 @@ class ClientEngine
       updated = hash[:update_entities]
       update_entities(space, updated) if updated
 
+      npcs = hash[:add_npcs]
+      add_npcs(space, npcs) if npcs
+
       move = hash[:move]
       apply_move(space, move) if move
 
       score_update = hash[:update_score]
       update_score(space, score_update) if score_update
     end
-  end
-
-  def apply_deltas_after_update(at_tick)
-    space = space_at(at_tick)
-
-    @deltas[at_tick].each do |hash|
-      npcs = hash[:add_npcs]
-      add_npcs(space, npcs) if npcs
-    end
-
-    # Any later spaces are now invalid
-    @spaces.delete_if {|key, _| key > at_tick}
-  end
-
-  def apply_all_deltas(at_tick)
-    apply_deltas_before_update(at_tick)
-    apply_deltas_after_update(at_tick)
   end
 
   def add_player(space, hash)
@@ -191,6 +173,7 @@ class ClientEngine
 
       if my_obj = space[registry_id]
         my_obj.update_from_json(json)
+        my_obj.grab!
       else
         add_entity(space, json)
       end
