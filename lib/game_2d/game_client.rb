@@ -25,10 +25,12 @@ require 'game_2d/zorder'
 module GameClient
   # Gosu methods we call:
   # caption=(text)
+  # width
   # mouse_x
   # mouse_y
   # close
   # button_down?
+  # text_input=(Gosu::TextInput instance)
   # draw_quad (from draw only)
   # translate (from draw only)
   #
@@ -61,18 +63,6 @@ module GameClient
     self.caption = "Game 2D"
 
     @pressed_buttons = []
-
-    @background_image = Gosu::Image.new(self, media("Space.png"), true)
-    @animation = Hash.new do |h, k|
-      h[k] = Gosu::Image::load_tiles(
-        self, k, CELL_WIDTH_IN_PIXELS, CELL_WIDTH_IN_PIXELS, false)
-    end
-
-    @cursor_anim = @animation[media("crosshair.gif")]
-
-    @beep = Gosu::Sample.new(self, media("Beep.wav")) # not used yet
-
-    @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
 
     # Local settings
     @local = {

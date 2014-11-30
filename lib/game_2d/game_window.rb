@@ -14,6 +14,19 @@ class GameWindow < Gosu::Window
 
   def initialize(opts = {})
     super(SCREEN_WIDTH, SCREEN_HEIGHT, false, 16)
+
+    @background_image = Gosu::Image.new(self, media("Space.png"), true)
+    @animation = Hash.new do |h, k|
+      h[k] = Gosu::Image::load_tiles(
+        self, k, CELL_WIDTH_IN_PIXELS, CELL_WIDTH_IN_PIXELS, false)
+    end
+
+    @cursor_anim = @animation[media("crosshair.gif")]
+
+    @beep = Gosu::Sample.new(self, media("Beep.wav")) # not used yet
+
+    @font = Gosu::Font.new(self, Gosu::default_font_name, 20)
+
     initialize_from_hash(opts)
   end
 

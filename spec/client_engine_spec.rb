@@ -1,4 +1,6 @@
+require 'set'
 require 'game_2d/game'
+require 'game_2d/game_client'
 require 'game_2d/server_port'
 require 'game_2d/client_engine'
 require 'game_2d/client_connection'
@@ -103,33 +105,34 @@ class FakeClientConnection < ClientConnection
 end
 
 class FakeGameWindow
-  attr_accessor :player_id, :conn, :engine
+  include GameClient
+  attr_accessor :player_id, :conn, :engine, :text_input
+  attr_reader :buttons_down
 
-  def initialize(host, port, player_name)
-    @conn = FakeClientConnection.new(host, port, self, player_name, 128)
-    @conn.engine = @engine = ClientEngine.new(self)
+  def initialize(opts = {})
+    initialize_from_hash(opts)
+    @buttons_down = Set.new
   end
 
-  def space
-    @engine.space
+  def _make_client_connection(*args)
+    FakeClientConnection.new(*args)
   end
 
-  def player
-    space[@player_id]
+  def display_message(*lines)
+    puts lines.collect {|l| "DISPLAY> #{l}"}.join("\n")
   end
+  def display_message!(*lines); display_message(*lines); end
+  def caption=(c); puts "WINDOW CAPTION => '#{c}'"; end
 
-  def update
-    @conn.update
-    @engine.update
+  def width; SCREEN_WIDTH; end
+
+  def button_down?(button)
+    @buttons_down.include?(button)
   end
 
   def generate_move(move)
     @conn.send_move move
   end
-
-  def display_message(*args); end
-  def display_message!(*args); end
-  def clear_message(*args); end
 end
 
 describe FakeGame do
@@ -157,9 +160,10 @@ describe FakeGame do
     :profile                  => profile,
     :registry_broadcast_every => registry_broadcast_every
   ) }
+  let(:key_size) { 128 }
   let(:window) {
     game
-    w = FakeGameWindow.new(hostname, port_number, player_name)
+    w = FakeGameWindow.new(:hostname => hostname, :port => port_number, :name => player_name, :key_size => key_size)
     w.conn.start(password_hash).join
     w
   }
