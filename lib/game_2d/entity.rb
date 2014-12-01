@@ -370,12 +370,13 @@ class Entity
     img.draw_rot(
       self.pixel_x + CELL_WIDTH_IN_PIXELS / 2,
       self.pixel_y + CELL_WIDTH_IN_PIXELS / 2,
-      draw_zorder, self.a)
+      draw_zorder, draw_angle)
     # 0.5, 0.5, # rotate around the center
     # 1, 1, # scaling factor
     # @color, # modify color
     # :add) # draw additively
   end
+  def draw_angle; a; end
 
   def to_s
     "#{self.class} (#{registry_id_safe}) at #{x}x#{y}"

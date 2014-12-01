@@ -184,6 +184,8 @@ class Game
           add_npcs npcs
         elsif (entities = action[:update_entities])
           update_npcs entities
+        elsif (entity_id = action[:snap_to_grid])
+          @space.snap_to_grid entity_id.to_sym
         else
           $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
         end

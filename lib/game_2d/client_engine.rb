@@ -48,7 +48,8 @@ class ClientEngine
 
   def create_initial_space(at_tick, highest_id)
     @earliest_tick = @tick = at_tick
-    space = @spaces[@tick] = GameSpace.new.establish_world(@world_name, @world_id, @width, @height)
+    space = @spaces[@tick] = GameSpace.new(@game_window).
+      establish_world(@world_name, @world_id, @width, @height)
     space.highest_id = highest_id
     space
   end
@@ -59,7 +60,7 @@ class ClientEngine
     fail "Can't create space at #{tick}; earliest space we know about is #{@earliest_tick}" if tick < @earliest_tick
 
     last_space = space_at(tick - 1)
-    @spaces[tick] = new_space = GameSpace.new.copy_from(last_space)
+    @spaces[tick] = new_space = GameSpace.new(@game_window).copy_from(last_space)
 
     apply_deltas(tick)
     new_space.update
@@ -101,6 +102,7 @@ class ClientEngine
 
   def add_delta(delta)
     at_tick = delta.delete :at_tick
+    fail "Received delta without at_tick: #{delta.inspect}" unless at_tick
     if at_tick < @tick
       $stderr.puts "Received delta #{@tick - at_tick} ticks late"
       if at_tick <= @earliest_tick
@@ -125,6 +127,9 @@ class ClientEngine
 
       updated = hash.delete :update_entities
       update_entities(space, updated) if updated
+
+      snap = hash.delete :snap_to_grid
+      space.snap_to_grid(snap.to_sym) if snap
 
       npcs = hash.delete :add_npcs
       add_npcs(space, npcs) if npcs

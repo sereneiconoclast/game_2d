@@ -50,8 +50,8 @@ class GameWindow < Gosu::Window
       (space.players + space.npcs).each {|entity| entity.draw(self) }
     end
 
-    space.players.sort.each_with_index do |player, num|
-      @font.draw("#{player.player_name}: #{player.score}", 10, 10 * (num * 2 + 1), ZOrder::Text, 1.0, 1.0, Gosu::Color::YELLOW)
+    space.entities_at_point(*mouse_coords).each_with_index do |entity, line|
+      @font.draw(entity.to_s, 10, 10 * (line * 2 + 1), ZOrder::Text, 1.0, 1.0, Gosu::Color::YELLOW)
     end
   end
 

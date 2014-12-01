@@ -10,7 +10,8 @@ class Destination < OwnedEntity
 
   def image_filename; "destination.png"; end
 
-  def draw_zorder; ZOrder::Destination end
+  def draw_zorder; ZOrder::Destination; end
+  def draw_angle; space.game.tick % 360; end
 end
 
 end

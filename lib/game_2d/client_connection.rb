@@ -89,7 +89,8 @@ class ClientConnection
       return
     end
 
-    fail "No at_tick in #{hash.inspect}" unless at_tick = hash.delete(:at_tick)
+    # Leave :at_tick intact; add_delta will reuse it
+    fail "No at_tick in #{hash.inspect}" unless at_tick = hash[:at_tick]
 
     if world = hash.delete(:world)
       @game.clear_message
@@ -139,6 +140,13 @@ class ClientConnection
   def send_update_entity(entity)
     return unless online?
     delta = { :update_entities => [entity], :at_tick => send_actions_at }
+    send_record delta
+    @engine.add_delta delta
+  end
+
+  def send_snap_to_grid(entity)
+    return unless online? && entity
+    delta = { :at_tick => send_actions_at, :snap_to_grid => entity.registry_id }
     send_record delta
     @engine.add_delta delta
   end

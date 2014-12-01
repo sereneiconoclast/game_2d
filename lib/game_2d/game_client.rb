@@ -64,12 +64,8 @@ module GameClient
 
     @pressed_buttons = []
 
-    # Local settings
-    @local = {
-      :create_npc => {
-        :snap => false
-      },
-    }
+    @snap_to_grid = false
+
     @create_npc_proc = make_block_npc_proc(5)
 
     @grabbed_entity_id = nil
@@ -120,13 +116,13 @@ module GameClient
 
   def object_creation_menu
     snap_text = lambda do |item|
-      @local[:create_npc][:snap] ? "Turn snap off" : "Turn snap on"
+      @snap_to_grid ? "Turn snap off" : "Turn snap on"
     end
 
     Menu.new('Object creation', self, @font,
       MenuItem.new('Object type', self, @font) { object_type_menu },
       MenuItem.new(snap_text, self, @font) do
-        @local[:create_npc][:snap] = !@local[:create_npc][:snap]
+        @snap_to_grid = !@snap_to_grid
       end,
       MenuItem.new('Save!', self, @font) { @conn.send_save }
     )
@@ -156,6 +152,10 @@ module GameClient
 
   def space
     @engine.space
+  end
+
+  def tick
+    @engine.tick
   end
 
   def player
@@ -189,14 +189,21 @@ module GameClient
     # @pressed_buttons is emptied by handle_input
     handle_input if @player_id
 
-    if @grabbed_entity_id && (grabbed = space[@grabbed_entity_id])
-      dest_x, dest_y = mouse_entity_location
-      vel_x = Entity.constrain_velocity((dest_x - grabbed.x) / ClientConnection::ACTION_DELAY)
-      vel_y = Entity.constrain_velocity((dest_y - grabbed.y) / ClientConnection::ACTION_DELAY)
-      @conn.send_update_entity(:registry_id => grabbed.registry_id, :velocity => [vel_x, vel_y], :moving => true)
-    end
+    move_grabbed_entity
 
     $stderr.puts "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile
+  end
+
+  def move_grabbed_entity(divide_by = ClientConnection::ACTION_DELAY)
+    return unless @grabbed_entity_id
+    return unless grabbed = space[@grabbed_entity_id]
+    dest_x, dest_y = mouse_entity_location
+    vel_x = Entity.constrain_velocity((dest_x - grabbed.x) / divide_by)
+    vel_y = Entity.constrain_velocity((dest_y - grabbed.y) / divide_by)
+    @conn.send_update_entity(
+      :registry_id => grabbed.registry_id,
+      :velocity => [vel_x, vel_y],
+      :moving => true)
   end
 
   def button_down(id)
@@ -231,7 +238,7 @@ module GameClient
       when Gosu::Kb4 then @create_npc_proc = make_block_npc_proc(20).call
       when Gosu::Kb5 then @create_npc_proc = make_block_npc_proc(25).call
       when Gosu::Kb6 then @create_npc_proc = make_block_npc_proc( 0).call
-      when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc(5).call
+      when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc.call
       else @pressed_buttons << id unless @dialog
     end
   end
@@ -256,7 +263,7 @@ module GameClient
   def mouse_entity_location
     x, y = mouse_coords
 
-    if @local[:create_npc][:snap]
+    if @snap_to_grid
       # When snap is on, we want the upper-left corner of the cell we point at
       return (x / WIDTH) * WIDTH, (y / HEIGHT) * HEIGHT
     else
@@ -306,7 +313,10 @@ module GameClient
   end
 
   def toggle_grab
-    return @grabbed_entity_id = nil if @grabbed_entity_id
+    if @grabbed_entity_id
+      @conn.send_snap_to_grid(space[@grabbed_entity_id]) if @snap_to_grid
+      return @grabbed_entity_id = nil
+    end
 
     @grabbed_entity_id = space.near_to(*mouse_coords).nullsafe_registry_id
   end

@@ -62,6 +62,8 @@ class Block < OwnedEntity
   end
 
   def image_filename; "#{level_name}.gif"; end
+
+  def to_s; "#{super} (#{@hp} HP)"; end
 end
 
 end

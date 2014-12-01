@@ -5,6 +5,7 @@ require 'facets/kernel/try'
 require 'game_2d/wall'
 require 'game_2d/player'
 require 'game_2d/serializable'
+require 'game_2d/entity_constants'
 require 'game_2d/entity/owned_entity'
 
 # Common code between the server and client for maintaining the world.
@@ -52,6 +53,8 @@ end
 
 
 class GameSpace
+  include EntityConstants
+
   attr_reader :world_name, :world_id, :players, :npcs, :cell_width, :cell_height, :game
   attr_accessor :storage, :highest_id
 
@@ -153,10 +156,10 @@ class GameSpace
     self
   end
 
-  def pixel_width; @cell_width * Entity::CELL_WIDTH_IN_PIXELS; end
-  def pixel_height; @cell_height * Entity::CELL_WIDTH_IN_PIXELS; end
-  def width; @cell_width * Entity::WIDTH; end
-  def height; @cell_height * Entity::HEIGHT; end
+  def pixel_width; @cell_width * CELL_WIDTH_IN_PIXELS; end
+  def pixel_height; @cell_height * CELL_WIDTH_IN_PIXELS; end
+  def width; @cell_width * WIDTH; end
+  def height; @cell_height * HEIGHT; end
 
   def next_id
     "R#{@highest_id += 1}".to_sym
@@ -268,14 +271,14 @@ class GameSpace
   end
 
   # Translate a subpixel point (X, Y) to a cell coordinate (cell_x, cell_y)
-  def cell_at_point(x, y)
-    [x / Entity::WIDTH, y / Entity::HEIGHT ]
+  def cell_location_at_point(x, y)
+    [x / WIDTH, y / HEIGHT ]
   end
 
   # Translate multiple subpixel points (X, Y) to a set of cell coordinates
   # (cell_x, cell_y)
-  def cells_at_points(coords)
-    coords.collect {|x, y| cell_at_point(x, y) }.to_set
+  def cell_locations_at_points(coords)
+    coords.collect {|x, y| cell_location_at_point(x, y) }.to_set
   end
 
   # Given the (X, Y) position of a theoretical entity, return the list of all
@@ -283,25 +286,25 @@ class GameSpace
   def corner_points_of_entity(x, y)
     [
       [x, y],
-      [x + Entity::WIDTH - 1, y],
-      [x, y + Entity::HEIGHT - 1],
-      [x + Entity::WIDTH - 1, y + Entity::HEIGHT - 1],
+      [x + WIDTH - 1, y],
+      [x, y + HEIGHT - 1],
+      [x + WIDTH - 1, y + HEIGHT - 1],
     ]
   end
 
   # Return a list of the entities (if any) at a subpixel point (X, Y)
   def entities_at_point(x, y)
-    at(*cell_at_point(x, y)).find_all do |e|
-      e.x <= x && e.x > (x - Entity::WIDTH) &&
-      e.y <= y && e.y > (y - Entity::HEIGHT)
+    at(*cell_location_at_point(x, y)).find_all do |e|
+      e.x <= x && e.x > (x - WIDTH) &&
+      e.y <= y && e.y > (y - HEIGHT)
     end
   end
 
   # Return whichever entity's center is closest (or ties for closest)
   def near_to(x, y)
     entities_at_point(x, y).collect do |entity|
-      center_x = entity.x + Entity::WIDTH/2
-      center_y = entity.y + Entity::HEIGHT/2
+      center_x = entity.x + WIDTH/2
+      center_y = entity.y + HEIGHT/2
       delta_x = (center_x - x).abs
       delta_y = (center_y - y).abs
       distance = Math.sqrt(delta_x**2 + delta_y**2)
@@ -320,8 +323,8 @@ class GameSpace
   # This includes the coordinates of eight points just beyond the entity's
   # borders
   def entities_bordering_entity_at(x, y)
-    r = x + Entity::WIDTH - 1
-    b = y + Entity::HEIGHT - 1
+    r = x + WIDTH - 1
+    b = y + HEIGHT - 1
     entities_at_points([
       [x - 1, y], [x, y - 1], # upper-left corner
       [r + 1, y], [r, y - 1], # upper-right corner
@@ -336,10 +339,16 @@ class GameSpace
     entities_at_points(corner_points_of_entity(x, y))
   end
 
+  # Retrieve list of cell-coordinates (expressed as [cell_x, cell_y]
+  # arrays), coinciding with position [x, y] (expressed in subpixels).
+  def cell_locations_overlapping(x, y)
+    cell_locations_at_points(corner_points_of_entity(x, y))
+  end
+
   # Retrieve list of cells that overlap with a theoretical entity
   # at position [x, y] (in subpixels).
   def cells_overlapping(x, y)
-    cells_at_points(corner_points_of_entity(x, y)).collect {|cx, cy| at(cx, cy) }
+    cell_locations_overlapping(x, y).collect {|cx, cy| at(cx, cy) }
   end
 
   # Add the entity to the grid
@@ -414,6 +423,28 @@ class GameSpace
     end
   end
 
+  def snap_to_grid(entity_id)
+    unless entity = self[entity_id]
+      $stderr.puts "Can't snap #{entity_id}, doesn't exist"
+      return
+    end
+
+    candidates = cell_locations_overlapping(entity.x, entity.y).collect do |cell_x, cell_y|
+      [cell_x * WIDTH, cell_y * HEIGHT]
+    end
+    sorted = candidates.to_a.sort do |(ax, ay), (bx, by)|
+      ((entity.x - ax).abs + (entity.y - ay).abs) <=>
+      ((entity.x - bx).abs + (entity.y - by).abs)
+    end
+    sorted.each do |dx, dy|
+      if entity.entities_obstructing(dx, dy).empty?
+        entity.warp(dx, dy)
+        return
+      end
+    end
+    $stderr.puts "Couldn't snap #{entity} to grid"
+  end
+
   # Doom an entity (mark it to be deleted but don't remove it yet)
   def doom(entity); @doomed << entity; end
 
@@ -443,6 +474,7 @@ class GameSpace
       if ent.grabbed?
         ent.move
         ent.release!
+        ent.x_vel = ent.y_vel = 0
       elsif ent.moving?
         ent.update
       end

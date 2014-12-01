@@ -33,6 +33,13 @@ class Teleporter < Entity
   def image_filename; "tele.gif"; end
 
   def draw_zorder; ZOrder::Teleporter end
+
+  def to_s
+    destinations = space.possessions(self).collect do |d|
+      "#{d.x}x#{d.y}"
+    end.join(', ')
+    "#{super} => [#{destinations}]"
+  end
 end
 
 end
