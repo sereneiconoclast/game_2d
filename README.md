@@ -11,6 +11,13 @@ There's not much here yet, in terms of actual gameplay.  At this point I'm layin
 * Entity positions and velocities are integers.  Apart from player input, all entities' behaviors are predictable.  This allows the client to make accurate predictions of the server state.
 * New Entities are assigned IDs in order, again, to allow the client to predict which ID will be assigned to each new entity.
 * Clients connect using REnet.  The handshaking process creates a Player object to represent the client.
+* Client and server use Diffie-Hellman key exchange to establish a shared secret.  This is used to encrypt sensitive information, rather like SSH (but over REnet).
+  * Right now, the only sensitive information is the user's password.  This allows the server to remember who's who.
+* On startup, the client prompts the user to enter the password, which is encrypted and then sent to the server along with the player-name.
+* Server keeps a record of each player and their password.
+  * Nothing else interesting here yet, but I fully expect to put an inventory here, once there is anything useful to carry around.
+  * This is also where I plan to put authorization data - who's a god player (level editor) and who isn't.
+  * Player data is persisted in ~/.game_2d/players/players as JSON text.
 * Keyboard commands control the player:
   * A and D, or LeftArrow and RightArrow: Hold down to accelerate.
   * LeftControl or RightControl: Hold down to brake (slow down).
@@ -19,15 +26,19 @@ There's not much here yet, in terms of actual gameplay.  At this point I'm layin
     * When not building: Flip (turn 180 degrees).
     * When building: Rise up (ascend to the top of the built block).
   * Left button: Fire a pellet.  Mouse click determines the direction and speed -- closer to the player means slower speed.
-  * Right button: Build a block where you click.  *(This will eventually become part of a level-editing mode.)*
+  * Right button: Grab an entity and drag it around.  Right-click again to release.  Grab is affected by snap-to-grid.  *(This will eventually become part of a level-editing mode.)*
+  * Shifted right button, or B: Build a block where the mouse points.  *(This will eventually become part of a level-editing mode.)*
+  * 1 through 7: Shortcuts for building Dirt, Brick, Cement, Steel, Unlikelium, Titanium, Teleporter.
+* Mousing over an entity displays some basic information about it.  *(This will eventually become part of a level-editing mode.)*
 * A simple menu system is also available.  Left-click to select.  Esc returns to the top-level.
 * The menus include a Save feature, which tells the server to save the level's state.
-  * Levels are persisted in ~/.game_2d/<level name> as JSON text.
+  * Levels are persisted in ~/.game_2d/levels/<level name> as JSON text.
   * On subsequent startup with the same name, the level is loaded.
 * The client and server communicate using JSON text.  This is undoubtedly inefficient, but aids in debugging at this early stage.
 * Every frame is numbered by the server, and is referred to as a 'tick'.
 * Player actions are both executed locally, and sent to the server.
 * If other players are connected, the server sends everyone's actions to everyone else.
+  * This is obviously insecure.  Validating user data is on my to-do list.
 * Player actions are dated six ticks in the future, to give everyone a chance to get the message early.  That way everyone can execute the action at the same time.
 * The server broadcasts the complete GameSpace four times a second, just in case a client gets out of sync.
 * The client predicts the server state, but treats its own copy as advisory only -- the server's is definitive.
@@ -44,11 +55,13 @@ The physics is (intentionally) pretty simple.  Unsupported objects fall, acceler
 
 When building a block, the longer you hold the S or DownArrow key, the more HP will be awarded to the block.  Hitting a block with a pellet reduces its HP, until it degrades to a lower form.  Dirt blocks with 1 HP will be entirely destroyed when hit.
 
-Whether an object is supported depends exclusively on its immediate surroundings.  That means two objects can support each other, and hang suspended.  For example, a dirt block sitting on a steel block will support each other.  A horizontal row of brick, capped at either end with cement, will also be free-standing.
+Whether a block is supported depends exclusively on its immediate surroundings.  That means two blocks can support each other, and hang suspended.  For example, a dirt block sitting on a steel block will support each other.  A horizontal row of brick, capped at either end with cement, will also be free-standing.
 
-Pellets are fired from the player's center, and are affected by gravity.  They damage whatever they hit first, and disappear.  Pellets won't hit the player who fired them.
+Pellets are fired from the player's center, and are affected by gravity.  They damage whatever they hit first, and disappear.  Pellets won't hit the player who fired them.  So far, only blocks can take damage; players are indestructible (but you know that will change).
 
-There are also Titanium entities, which never fall, and are indestructible.  These are intended for use in designing levels with specific shapes.  They can only be created by using the menu to select Titanium, and then right-clicking.
+There are also Titanium entities, which never fall, and are indestructible.  These are intended for use in designing levels with specific shapes.  They can only be created by using the menu to select Titanium, and then shift-right-clicking.
+
+Teleporters never fall.  Their only action is to transfer their contents (anything close enough to intersect with their center) to their single destination-point.  This transfer affects location but not velocity.  Transfer doesn't happen if there is something blocking the exit point.
 
 A player is considered to be supported if their "feet" are touching a block.  Unsupported players will turn feet-downward and fall, until they land on something.  Supported players may slide left or right, and will follow any edges they reach -- going up and down walls, or hanging under ceilings.  The "flip" maneuver swaps head and feet; this becomes useful if the player's head is exactly touching another block.  At all other times, a flip leads to a fall (which can be useful too).
 
