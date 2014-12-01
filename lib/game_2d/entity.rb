@@ -218,7 +218,6 @@ class Entity
     else
       blk.call
     end
-    wake!
   end
 
   def i_hit(other)

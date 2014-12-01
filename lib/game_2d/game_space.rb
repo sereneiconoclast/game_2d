@@ -439,6 +439,7 @@ class GameSpace
     sorted.each do |dx, dy|
       if entity.entities_obstructing(dx, dy).empty?
         entity.warp(dx, dy)
+        entity.wake!
         return
       end
     end

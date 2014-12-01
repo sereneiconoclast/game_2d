@@ -58,18 +58,18 @@ describe GameSpace do
     end
   end
 
-  describe "#cell_at_point" do
+  describe "#cell_location_at_point" do
     it "translates from a point to a cell" do
-      expect(subject.cell_at_point(399,399)).to eq([0,0])
-      expect(subject.cell_at_point(399,400)).to eq([0,1])
-      expect(subject.cell_at_point(401,399)).to eq([1,0])
-      expect(subject.cell_at_point(799,800)).to eq([1,2])
+      expect(subject.cell_location_at_point(399,399)).to eq([0,0])
+      expect(subject.cell_location_at_point(399,400)).to eq([0,1])
+      expect(subject.cell_location_at_point(401,399)).to eq([1,0])
+      expect(subject.cell_location_at_point(799,800)).to eq([1,2])
     end
   end
 
-  describe "#cells_at_points" do
+  describe "#cell_locations_at_points" do
     it "translates from points to cells" do
-      expect(subject.cells_at_points(
+      expect(subject.cell_locations_at_points(
         [
           [399,399],
           [399,400],

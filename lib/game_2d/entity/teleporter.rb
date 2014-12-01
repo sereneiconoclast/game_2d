@@ -17,6 +17,7 @@ class Teleporter < Entity
           dest = dest.first
           if overlap.entities_obstructing(dest.x, dest.y).empty?
             overlap.warp(dest.x, dest.y)
+            overlap.wake!
           end
         when 0 then
           $stderr.puts "#{self}: No destination"

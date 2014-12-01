@@ -175,8 +175,9 @@ describe FakeGame do
 
   def update_both
     game.update
-#   $stderr.puts "SERVER TICK #{game.tick}"
+#   $stderr.puts "SERVER updated, TICK #{game.tick}"
     window.update
+#   $stderr.puts "CLIENT updated"
   end
 
 # require 'pry'
