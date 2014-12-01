@@ -16,7 +16,7 @@ class ServerConnection
     puts "ServerConnection: New connection #{id} from #{remote_addr}"
   end
 
-  attr_reader :player_id
+  attr_reader :id, :player_id
 
   def answer_handshake(handshake)
     @player_name = handshake[:player_name]
@@ -96,19 +96,22 @@ class ServerConnection
   def on_packet(data, channel)
     hash = JSON.parse(data).fix_keys
     debug_packet('Received', hash)
-    if (handshake = hash[:handshake])
+    if handshake = hash.delete(:handshake)
       answer_handshake(handshake)
-    elsif (password_hash = hash[:password_hash])
-      answer_login(password_hash, hash[:iv])
-    elsif (hash[:save])
+    elsif password_hash = hash.delete(:password_hash)
+      answer_login(password_hash, hash.delete(:iv))
+    elsif hash.delete(:save)
       @game.save
-    elsif (ping = hash[:ping])
+    elsif ping = hash.delete(:ping)
       answer_ping ping
     else
-      @game.add_player_action @player_id, hash
-      @port.broadcast_player_action @id,
-        hash.merge(:player_id => @player_id),
-        channel
+      if hash[:player_id] = @player_id
+        @game.add_player_action hash
+        # TODO: Validate
+        @port.broadcast_player_action hash, channel
+      else
+        $stderr.puts "Ignoring move #{hash.inspect}, no player_id for this connection"
+      end
     end
   end
 

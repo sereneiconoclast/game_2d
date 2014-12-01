@@ -124,14 +124,8 @@ class Game
   end
 
   # Answering request from client
-  def create_npc(json)
-    add_npc(Serializable.from_json(json, :GENERATE_ID))
-  end
-
-  def add_npc(npc)
-    @space << npc or return
-    puts "Created #{npc}"
-    each_player_conn {|pc| pc.add_npc npc, @tick }
+  def add_npcs(npcs_json)
+    npcs_json.each {|json| @space << Serializable.from_json(json) }
   end
 
   def update_npcs(npcs_json)
@@ -162,8 +156,8 @@ class Game
     @space.npcs
   end
 
-  def add_player_action(player_id, action)
-    at_tick = action[:at_tick]
+  def add_player_action(action)
+    at_tick, player_id = action[:at_tick], action[:player_id]
     unless at_tick
       $stderr.puts "Received update from #{player_id} without at_tick!"
       at_tick = @tick + 1
@@ -172,12 +166,13 @@ class Game
       $stderr.puts "Received update from #{player_id} #{@tick + 1 - at_tick} ticks late"
       at_tick = @tick + 1
     end
-    @player_actions[at_tick] << [player_id, action]
+    @player_actions[at_tick] << action
   end
 
   def process_player_actions
     if actions = @player_actions.delete(@tick)
-      actions.each do |player_id, action|
+      actions.each do |action|
+        player_id = action.delete :player_id
         player = @space[player_id]
         unless player
           $stderr.puts "No such player #{player_id} -- dropping move"
@@ -185,8 +180,8 @@ class Game
         end
         if (move = action[:move])
           player.add_move move
-        elsif (npc = action[:create_npc])
-          create_npc npc
+        elsif (npcs = action[:add_npcs])
+          add_npcs npcs
         elsif (entities = action[:update_entities])
           update_npcs entities
         else

@@ -58,10 +58,12 @@ class ServerPort
   end
 
   # Re-broadcast to everyone except the original sender
-  def broadcast_player_action(sender_id, hash, channel)
+  def broadcast_player_action(hash, channel)
+    sender_player_id = hash[:player_id]
+    fail "No player_id in #{hash.inspect}" unless sender_player_id
     data = hash.to_json
-    @clients.keys.each do |id|
-      @server.send_packet(id, data, false, channel) unless id == sender_id
+    @player_connections.each do |player_id, conn|
+      @server.send_packet(conn.id, data, false, channel) unless player_id == sender_player_id
     end
     @server.flush
   end

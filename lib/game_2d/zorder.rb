@@ -1,3 +1,3 @@
 module ZOrder
-  Background, Objects, Pellet, Player, Highlight, Text, Cursor = *0..6
+  Background, Teleporter, Destination, Objects, Pellet, Player, Highlight, Text, Cursor = *0..8
 end

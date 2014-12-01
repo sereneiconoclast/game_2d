@@ -79,33 +79,31 @@ class ClientConnection
     hash = JSON.parse(data).fix_keys
     debug_packet('Received', hash)
 
-    pong = hash[:pong]
-    if pong
+    if pong = hash.delete(:pong)
       stop = Time.now.to_f
       puts "Ping took #{stop - pong[:start]} seconds"
     end
 
-    server_public_key = hash[:server_public_key]
-    if server_public_key
+    if server_public_key = hash.delete(:server_public_key)
       login(server_public_key)
       return
     end
 
-    at_tick = hash[:at_tick]
-    fail "No at_tick in #{hash.inspect}" unless at_tick
+    fail "No at_tick in #{hash.inspect}" unless at_tick = hash.delete(:at_tick)
 
-    world = hash[:world]
-    if world
+    if world = hash.delete(:world)
       @game.clear_message
       @engine.establish_world(world, at_tick)
     end
+
+    you_are = hash.delete :you_are
+    registry, highest_id = hash.delete(:registry), hash.delete(:highest_id)
 
     delta_keys = [
       :add_players, :add_npcs, :delete_entities, :update_entities, :update_score, :move
     ]
     @engine.add_delta(hash) if delta_keys.any? {|k| hash.has_key? k}
 
-    you_are = hash[:you_are]
     if you_are
       # The 'world' response includes deltas for add_players and add_npcs
       # Need to process those first, as one of the players is us
@@ -114,7 +112,6 @@ class ClientConnection
       @engine.create_local_player you_are
     end
 
-    registry, highest_id = hash[:registry], hash[:highest_id]
     @engine.sync_registry(registry, highest_id, at_tick) if registry
   end
 
@@ -127,15 +124,16 @@ class ClientConnection
     args[:move] = move.to_s
     delta = { :at_tick => send_actions_at, :move => args }
     send_record delta
-    delta[:move][:player_id] = @engine.player_id
+    delta[:player_id] = @engine.player_id
     @engine.add_delta delta
   end
 
   def send_create_npc(npc)
     return unless online?
-    delta = { :at_tick => send_actions_at, :create_npc => npc }
-    send_record delta
-    @engine.add_delta delta
+    # :on_* hooks are for our own use; we don't send them
+    remote_npc = npc.reject {|k,v| k.to_s.start_with? 'on_'}
+    send_record :at_tick => send_actions_at, :add_npcs => [ remote_npc ]
+    @engine.add_delta :at_tick => send_actions_at, :add_npcs => [ npc ]
   end
 
   def send_update_entity(entity)

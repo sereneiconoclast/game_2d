@@ -117,23 +117,29 @@ class ClientEngine
     space = space_at(at_tick)
 
     @deltas[at_tick].each do |hash|
-      players = hash[:add_players]
+      players = hash.delete :add_players
       add_players(space, players) if players
 
-      doomed = hash[:delete_entities]
+      doomed = hash.delete :delete_entities
       delete_entities(space, doomed) if doomed
 
-      updated = hash[:update_entities]
+      updated = hash.delete :update_entities
       update_entities(space, updated) if updated
 
-      npcs = hash[:add_npcs]
+      npcs = hash.delete :add_npcs
       add_npcs(space, npcs) if npcs
 
-      move = hash[:move]
-      apply_move(space, move) if move
+      move = hash.delete :move
+      player_id = hash.delete :player_id
+      if move
+        fail "No player_id sent with move #{move.inspect}" unless player_id
+        apply_move(space, move, player_id.to_sym)
+      end
 
-      score_update = hash[:update_score]
+      score_update = hash.delete :update_score
       update_score(space, score_update) if score_update
+
+      $stderr.puts "Unprocessed deltas: #{hash.keys.join(', ')}" unless hash.empty?
     end
   end
 
@@ -148,15 +154,18 @@ class ClientEngine
     players.each {|json| add_player(space, json) }
   end
 
-  def apply_move(space, move)
-    player_id = move[:player_id]
+  def apply_move(space, move, player_id)
     player = space[player_id]
     fail "No such player #{player_id}, can't apply #{move.inspect}" unless player
     player.add_move move
   end
 
   def add_npcs(space, npcs)
-    npcs.each {|json| space << Serializable.from_json(json) }
+    npcs.each do |json|
+      on_create = json.delete :on_create
+      space << (entity = Serializable.from_json(json))
+      on_create.call(entity) if on_create
+    end
   end
 
   def add_entity(space, json)

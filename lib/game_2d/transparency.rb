@@ -11,10 +11,13 @@ module Transparency
     # Walls and titanium: transparent to absolutely nothing
     return false if wall?(one) || wall?(two)
 
+    # Teleporter destinations: transparent to everything
+    return true if destination?(one) || destination?(two)
+
     # Teleporters: transparent to everything except other
     # teleporters, and destinations
-    return teleporter_ok?(one, two) if teleporter_part?(one)
-    return teleporter_ok?(two, one) if teleporter_part?(two)
+    return teleporter_ok?(one, two) if teleporter?(one)
+    return teleporter_ok?(two, one) if teleporter?(two)
 
     # Owned entities are transparent to the owner, and other
     # objects with the same owner
@@ -33,11 +36,15 @@ module Transparency
   end
 
   def teleporter_ok?(tp, other)
-    !teleporter_part?(other)
+    !teleporter?(other)
   end
 
-  def teleporter_part?(entity)
-    entity.is_a?(Entity::Teleporter) || entity.is_a?(Entity::Destination)
+  def teleporter?(entity)
+    entity.is_a?(Entity::Teleporter)
+  end
+
+  def destination?(entity)
+    entity.is_a?(Entity::Destination)
   end
 
   def related_by_owner?(o, other)

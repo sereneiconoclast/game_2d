@@ -6,7 +6,8 @@ class OwnedEntity < Entity
   attr_reader :owner_id
 
   def owner_id=(id)
-    @owner_id = id.try(:to_sym)
+    old_owner_id, @owner_id = @owner_id, id.try(:to_sym)
+    space.owner_change(registry_id, old_owner_id, @owner_id) if space && registry_id?
   end
 
   def owner

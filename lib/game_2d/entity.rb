@@ -207,7 +207,7 @@ class Entity
   end
 
   # Update position/velocity/angle data, and tell the space about it
-  def warp(x, y, x_vel, y_vel, angle=self.a, moving=@moving)
+  def warp(x, y, x_vel=nil, y_vel=nil, angle=nil, moving=nil)
     blk = proc do
       @x, @y, self.x_vel, self.y_vel, self.a, @moving =
         (x || @x), (y || @y), (x_vel || @x_vel), (y_vel || @y_vel), (angle || @a),
@@ -218,6 +218,7 @@ class Entity
     else
       blk.call
     end
+    wake!
   end
 
   def i_hit(other)

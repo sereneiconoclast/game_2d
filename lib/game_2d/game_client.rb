@@ -67,11 +67,10 @@ module GameClient
     # Local settings
     @local = {
       :create_npc => {
-        :type => 'Entity::Block',
-        :hp   => 5,
-        :snap => false,
+        :snap => false
       },
     }
+    @create_npc_proc = make_block_npc_proc(5)
 
     @grabbed_entity_id = nil
 
@@ -139,19 +138,15 @@ module GameClient
 
   def object_type_submenus
     [
-      ['Dirt',        'Entity::Block',       5],
-      ['Brick',       'Entity::Block',      10],
-      ['Cement',      'Entity::Block',      15],
-      ['Steel',       'Entity::Block',      20],
-      ['Unlikelium',  'Entity::Block',      25],
-      ['Titanium',    'Entity::Titanium',    0],
-      ['Teleporter',  'Entity::Teleporter',  0],
-      ['Destination', 'Entity::Destination', 0],
-    ].collect do |type_name, class_name, hp|
-      MenuItem.new(type_name, self, @font) do |item|
-        @local[:create_npc][:type] = class_name
-        @local[:create_npc][:hp] = hp if hp
-      end
+      ['Dirt',        make_block_npc_proc( 5)],
+      ['Brick',       make_block_npc_proc(10)],
+      ['Cement',      make_block_npc_proc(15)],
+      ['Steel',       make_block_npc_proc(20)],
+      ['Unlikelium',  make_block_npc_proc(25)],
+      ['Titanium',    make_block_npc_proc( 0)],
+      ['Teleporter',  make_teleporter_npc_proc],
+    ].collect do |type_name, p|
+      MenuItem.new(type_name, self, @font) { @create_npc_proc = p }
     end
   end
 
@@ -225,10 +220,18 @@ module GameClient
         end
       when Gosu::MsRight then # right-click
         if button_down?(Gosu::KbRightShift) || button_down?(Gosu::KbLeftShift)
-          send_create_npc
+          @create_npc_proc.call
         else
           toggle_grab
         end
+      when Gosu::KbB then @create_npc_proc.call
+      when Gosu::Kb1 then @create_npc_proc = make_block_npc_proc( 5).call
+      when Gosu::Kb2 then @create_npc_proc = make_block_npc_proc(10).call
+      when Gosu::Kb3 then @create_npc_proc = make_block_npc_proc(15).call
+      when Gosu::Kb4 then @create_npc_proc = make_block_npc_proc(20).call
+      when Gosu::Kb5 then @create_npc_proc = make_block_npc_proc(25).call
+      when Gosu::Kb6 then @create_npc_proc = make_block_npc_proc( 0).call
+      when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc(5).call
       else @pressed_buttons << id unless @dialog
     end
   end
@@ -263,15 +266,43 @@ module GameClient
     end
   end
 
-  def send_create_npc
-    @conn.send_create_npc(
-      :class => @local[:create_npc][:type],
+  def make_block_npc_proc(hp)
+    type = hp.zero? ? 'Entity::Titanium' : 'Entity::Block'
+    proc { send_create_npc type, :hp => hp }
+  end
+
+  def make_teleporter_npc_proc
+    proc do
+      send_create_npc 'Entity::Teleporter', :on_create => make_destination_npc_proc
+    end
+  end
+
+  def make_destination_npc_proc
+    proc do |teleporter|
+      send_create_npc 'Entity::Destination', :owner => teleporter.registry_id,
+        :on_create => make_grab_destination_proc
+    end
+  end
+
+  def make_grab_destination_proc
+    proc do |destination|
+      grab_specific destination.registry_id
+    end
+  end
+
+  def send_create_npc(type, args)
+    args.merge!(
+      :class => type,
       :position => mouse_entity_location,
       :velocity => [0, 0],
       :angle => 0,
-      :moving => true,
-      :hp => @local[:create_npc][:hp]
+      :moving => true
     )
+    @conn.send_create_npc(args)
+  end
+
+  def grab_specific(registry_id)
+    @grabbed_entity_id = registry_id
   end
 
   def toggle_grab

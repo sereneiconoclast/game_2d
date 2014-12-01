@@ -37,10 +37,9 @@ module Serializable
     self.class.name
   end
 
-  def self.from_json(json, generate_id=false)
+  def self.from_json(json)
     return nil unless json
     class_name = json[:class]
-    binding.pry unless class_name
     raise "Suspicious class name: #{class_name}" unless
       (class_name == 'Player') ||
       (class_name.start_with? 'Entity::') ||
@@ -49,18 +48,8 @@ module Serializable
     clazz = constant(class_name)
     it = clazz.new
 
-    # A registry ID must be specified either in the JSON or by the caller, but
-    # not both
     if it.is_a? Registerable
-      if generate_id
-        fail("Entity #{it} (from #{json.inspect}) already has " +
-          "ID #{it.registry_id}, cannot generate") if it.registry_id?
-        # Leave it nil - it will be populated when added to a space
-      else
-        it.registry_id = json[:registry_id]
-      end
-    elsif generate_id
-      fail("#{clazz} is not Registerable")
+      it.registry_id = json[:registry_id] if json[:registry_id]
     end
 
     it.update_from_json(json)

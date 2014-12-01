@@ -5,6 +5,7 @@ require 'facets/kernel/try'
 require 'game_2d/wall'
 require 'game_2d/player'
 require 'game_2d/serializable'
+require 'game_2d/entity/owned_entity'
 
 # Common code between the server and client for maintaining the world.
 # This is a bounded space (walls on all sides).
@@ -60,6 +61,13 @@ class GameSpace
     @highest_id = 0
 
     @registry = {}
+
+    # Ownership registry needs to be here too.  Each copy of the space must be
+    # separate.  Otherwise you get duplicate entries whenever ClientEngine copies
+    # the GameSpace.
+    #
+    # owner.registry_id => [registry_id, ...]
+    @ownership = Hash.new {|h,k| h[k] = Array.new}
 
     # I create a @doomed array so we can remove entities after all collisions
     # have been processed, to avoid confusion
@@ -190,6 +198,7 @@ class GameSpace
     end
     @registry[reg_id] = entity
     entity_list(entity) << entity
+    register_with_owner(entity)
     nil
   end
 
@@ -202,8 +211,32 @@ class GameSpace
 
   def deregister(entity)
     fail "#{entity} not registered" unless registered?(entity)
+    deregister_ownership(entity)
     entity_list(entity).delete entity
     @registry.delete entity.registry_id
+  end
+
+  def register_with_owner(owned)
+    return unless owned.is_a?(Entity::OwnedEntity) && owned.owner_id
+    @ownership[owned.owner_id] << owned.registry_id
+  end
+
+  def deregister_ownership(entity)
+    if entity.is_a?(Entity::OwnedEntity) && entity.owner_id
+      @ownership[entity.owner_id].delete entity.registry_id
+    end
+    @ownership.delete entity.registry_id
+  end
+
+  def owner_change(owned_id, old_owner_id, new_owner_id)
+    return unless owned_id
+    return if old_owner_id == new_owner_id
+    @ownership[old_owner_id].delete(owned_id) if old_owner_id
+    @ownership[new_owner_id] << owned_id if new_owner_id
+  end
+
+  def possessions(entity)
+    @ownership[entity.registry_id].collect {|id| self[id]}
   end
 
   # We can safely look up cell_x == -1, cell_x == @cell_width, cell_y == -1,
