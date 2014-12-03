@@ -73,7 +73,7 @@ class Player < Entity
 
     if falling = falling?
       self.a = 0
-      accelerate(0, 1)
+      space.fall(self)
     end
 
     args = @moves.shift

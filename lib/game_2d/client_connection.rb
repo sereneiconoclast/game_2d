@@ -144,6 +144,13 @@ class ClientConnection
     @engine.add_delta delta
   end
 
+  def send_delete_entity(entity)
+    return unless online?
+    delta = { :delete_entities => [entity.registry_id], :at_tick => send_actions_at }
+    send_record delta
+    @engine.add_delta delta
+  end
+
   def send_snap_to_grid(entity)
     return unless online? && entity
     delta = { :at_tick => send_actions_at, :snap_to_grid => entity.registry_id }

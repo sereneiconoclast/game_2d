@@ -66,6 +66,9 @@ class Entity
     @y_vel = constrain_velocity yv
   end
 
+  def cx; x + WIDTH/2; end
+  def cy; y + HEIGHT/2; end
+
   # True if we need to update this entity
   def moving?; @moving; end
 
@@ -202,7 +205,7 @@ class Entity
   # Handle any behavior specific to this entity
   # Default: Accelerate downward if the subclass says we should fall
   def update
-    accelerate(0, 1) if should_fall?
+    space.fall(self) if should_fall?
     move
   end
 
@@ -225,7 +228,7 @@ class Entity
     puts "#{self} hit #{other.inspect}"
   end
 
-  def harmed_by(other); end
+  def harmed_by(other, damage=1); end
 
   # Return any entities adjacent to this one in the specified direction
   def next_to(angle, x=@x, y=@y)

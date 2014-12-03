@@ -4,6 +4,7 @@ require 'game_2d/entity/titanium'
 require 'game_2d/entity/owned_entity'
 require 'game_2d/entity/teleporter'
 require 'game_2d/entity/destination'
+require 'game_2d/entity/hole'
 require 'game_2d/wall'
 
 module Transparency
@@ -11,8 +12,8 @@ module Transparency
     # Walls and titanium: transparent to absolutely nothing
     return false if wall?(one) || wall?(two)
 
-    # Teleporter destinations: transparent to everything
-    return true if destination?(one) || destination?(two)
+    # Holes and teleporter destinations: transparent to everything
+    return true if transparent_to_all?(one) || transparent_to_all?(two)
 
     # Teleporters: transparent to everything except other
     # teleporters, and destinations
@@ -43,8 +44,8 @@ module Transparency
     entity.is_a?(Entity::Teleporter)
   end
 
-  def destination?(entity)
-    entity.is_a?(Entity::Destination)
+  def transparent_to_all?(entity)
+    entity.is_a?(Entity::Destination) || entity.is_a?(Entity::Hole)
   end
 
   def related_by_owner?(o, other)

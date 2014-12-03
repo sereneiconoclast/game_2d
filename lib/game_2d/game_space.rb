@@ -5,6 +5,7 @@ require 'facets/kernel/try'
 require 'game_2d/wall'
 require 'game_2d/player'
 require 'game_2d/serializable'
+require 'game_2d/default_gravity'
 require 'game_2d/entity_constants'
 require 'game_2d/entity/owned_entity'
 
@@ -78,6 +79,7 @@ class GameSpace
 
     @players = []
     @npcs = []
+    @gravities = []
   end
 
   # Width and height, measured in cells
@@ -202,6 +204,7 @@ class GameSpace
     @registry[reg_id] = entity
     entity_list(entity) << entity
     register_with_owner(entity)
+    register_gravity(entity)
     nil
   end
 
@@ -214,6 +217,7 @@ class GameSpace
 
   def deregister(entity)
     fail "#{entity} not registered" unless registered?(entity)
+    deregister_gravity(entity)
     deregister_ownership(entity)
     entity_list(entity).delete entity
     @registry.delete entity.registry_id
@@ -229,6 +233,15 @@ class GameSpace
       @ownership[entity.owner_id].delete entity.registry_id
     end
     @ownership.delete entity.registry_id
+  end
+
+  def register_gravity(entity)
+    return unless entity.respond_to? :apply_gravity_to?
+    @gravities.unshift entity.registry_id
+  end
+
+  def deregister_gravity(entity)
+    @gravities.delete entity.registry_id
   end
 
   def owner_change(owned_id, old_owner_id, new_owner_id)
@@ -300,15 +313,17 @@ class GameSpace
     end
   end
 
+  def distance_between(x1, y1, x2, y2)
+    delta_x = (x1 - x2).abs
+    delta_y = (y1 - y2).abs
+    Math.sqrt(delta_x**2 + delta_y**2)
+  end
+
+  # Consider all entities intersecting with (x, y)
   # Return whichever entity's center is closest (or ties for closest)
   def near_to(x, y)
     entities_at_point(x, y).collect do |entity|
-      center_x = entity.x + WIDTH/2
-      center_y = entity.y + HEIGHT/2
-      delta_x = (center_x - x).abs
-      delta_y = (center_y - y).abs
-      distance = Math.sqrt(delta_x**2 + delta_y**2)
-      [distance, entity]
+      [distance_between(entity.cx, entity.cy, x, y), entity]
     end.sort {|(d1, e1), (d2, e2)| d1 <=> d2}.first.try(:last)
   end
 
@@ -446,8 +461,18 @@ class GameSpace
     $stderr.puts "Couldn't snap #{entity} to grid"
   end
 
+  def fall(entity)
+    return if @gravities.find {|g| self[g].apply_gravity_to?(entity)}
+    entity.accelerate(0, 1)
+  end
+
   # Doom an entity (mark it to be deleted but don't remove it yet)
-  def doom(entity); @doomed << entity; end
+  def doom(entity)
+    return unless entity && registered?(entity)
+    return if doomed?(entity)
+    @doomed << entity
+    entity.destroy!
+  end
 
   def doomed?(entity); @doomed.include?(entity); end
 
@@ -459,10 +484,9 @@ class GameSpace
   def purge_doomed_entities
     @doomed.each do |entity|
       if registered?(entity)
-        entity.destroy!
-        deregister(entity)
-        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
         remove_entity_from_grid(entity)
+        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
+        deregister(entity)
       else
         fire_entity_not_found(entity)
       end

@@ -134,13 +134,14 @@ module GameClient
 
   def object_type_submenus
     [
-      ['Dirt',        make_block_npc_proc( 5)],
-      ['Brick',       make_block_npc_proc(10)],
-      ['Cement',      make_block_npc_proc(15)],
-      ['Steel',       make_block_npc_proc(20)],
-      ['Unlikelium',  make_block_npc_proc(25)],
-      ['Titanium',    make_block_npc_proc( 0)],
+      ['Dirt',        make_block_npc_proc( 5) ],
+      ['Brick',       make_block_npc_proc(10) ],
+      ['Cement',      make_block_npc_proc(15) ],
+      ['Steel',       make_block_npc_proc(20) ],
+      ['Unlikelium',  make_block_npc_proc(25) ],
+      ['Titanium',    make_block_npc_proc( 0) ],
       ['Teleporter',  make_teleporter_npc_proc],
+      ['Hole',        make_hole_npc_proc      ],
     ].collect do |type_name, p|
       MenuItem.new(type_name, self, @font) { @create_npc_proc = p }
     end
@@ -239,6 +240,8 @@ module GameClient
       when Gosu::Kb5 then @create_npc_proc = make_block_npc_proc(25).call
       when Gosu::Kb6 then @create_npc_proc = make_block_npc_proc( 0).call
       when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc.call
+      when Gosu::Kb8 then @create_npc_proc = make_hole_npc_proc.call
+      when Gosu::KbDelete then send_delete_entity
       else @pressed_buttons << id unless @dialog
     end
   end
@@ -246,8 +249,14 @@ module GameClient
   def send_fire
     return unless @player_id
     x, y = mouse_coords
-    x_vel = (x - (player.x + WIDTH / 2)) / PIXEL_WIDTH
-    y_vel = (y - (player.y + WIDTH / 2)) / PIXEL_WIDTH
+    if y < player.cy # Firing up
+      y_vel = -Math.sqrt(2 * (player.cy - y)).round
+      x_vel = (player.cx - x) / y_vel
+    else
+      range = x - player.cx
+      x_vel = (Math.sqrt(1.0 / (2.0 * (y - player.cy))) * range).round
+      y_vel = 0
+    end
     @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
   end
 
@@ -297,7 +306,13 @@ module GameClient
     end
   end
 
-  def send_create_npc(type, args)
+  def make_hole_npc_proc
+    proc do
+      send_create_npc 'Entity::Hole'
+    end
+  end
+
+  def send_create_npc(type, args={})
     args.merge!(
       :class => type,
       :position => mouse_entity_location,
@@ -319,6 +334,11 @@ module GameClient
     end
 
     @grabbed_entity_id = space.near_to(*mouse_coords).nullsafe_registry_id
+  end
+
+  def send_delete_entity
+    return unless entity = space.near_to(*mouse_coords)
+    @conn.send_delete_entity entity
   end
 
   def shutdown

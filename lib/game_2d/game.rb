@@ -100,7 +100,7 @@ class Game
     player.y = (@space.height - Entity::HEIGHT) / 2
     other_players = @space.players.dup
     @space << player
-    other_players.each {|p| player_connection(p).add_player(player, @tick) }
+    other_players.each {|p| pc = player_connection(p) and pc.add_player(player, @tick) }
     player
   end
 
@@ -113,14 +113,19 @@ class Game
   end
 
   def each_player_conn
-    get_all_players.each {|p| yield player_connection(p)}
+    get_all_players.each {|p| pc = player_connection(p) and yield pc}
   end
 
-  def delete_entity(entity)
-    puts "Deleting #{entity}"
-    @space.doom entity
+  def send_player_gone(toast)
+    @space.doom toast
+    each_player_conn {|pc| pc.delete_entity toast, @tick }
+  end
+
+  def delete_entities(entities)
+    entities.each do |registry_id|
+      @space.doom(@space[registry_id])
+    end
     @space.purge_doomed_entities
-    each_player_conn {|pc| pc.delete_entity entity, @tick }
   end
 
   # Answering request from client
@@ -184,6 +189,8 @@ class Game
           add_npcs npcs
         elsif (entities = action[:update_entities])
           update_npcs entities
+        elsif (entities = action[:delete_entities])
+          delete_entities entities
         elsif (entity_id = action[:snap_to_grid])
           @space.snap_to_grid entity_id.to_sym
         else

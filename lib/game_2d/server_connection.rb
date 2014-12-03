@@ -90,7 +90,7 @@ class ServerConnection
     @port.deregister_player @player_id
     toast = player
     puts "#{toast} -- #{@remote_addr} disconnected at <#{@game.tick}>"
-    @game.delete_entity toast
+    @game.send_player_gone toast
   end
 
   def on_packet(data, channel)

@@ -28,7 +28,7 @@ class Teleporter < Entity
   end
 
   def destroy!
-    # destroy destination
+    space.possessions(self).each {|p| space.doom p}
   end
 
   def image_filename; "tele.gif"; end

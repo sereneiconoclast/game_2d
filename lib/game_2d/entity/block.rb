@@ -38,16 +38,16 @@ class Block < OwnedEntity
 
   def update
     if should_fall?
-      accelerate(0, 1)
+      space.fall(self)
     else
       self.x_vel = self.y_vel = 0
     end
     move
   end
 
-  def harmed_by(other)
+  def harmed_by(other, damage=1)
     puts "#{self}: Ouch!"
-    self.hp -= 1
+    self.hp -= damage
     @space.doom(self) if hp <= 0
   end
 

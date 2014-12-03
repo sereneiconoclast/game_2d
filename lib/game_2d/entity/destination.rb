@@ -12,6 +12,10 @@ class Destination < OwnedEntity
 
   def draw_zorder; ZOrder::Destination; end
   def draw_angle; space.game.tick % 360; end
+
+  def destroy!
+    space.doom owner
+  end
 end
 
 end
