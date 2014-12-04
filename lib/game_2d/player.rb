@@ -37,12 +37,7 @@ class Player < Entity
 
   def sleep_now?; false; end
 
-  def underfoot
-    opaque(next_to(self.a + 180))
-  end
-  def falling?
-    underfoot.empty?
-  end
+  def should_fall?; underfoot.empty?; end
 
   def build_block_id=(new_id)
     @build_block_id = new_id.try(:to_sym)
@@ -71,7 +66,7 @@ class Player < Entity
       @complex_move = nil
     end
 
-    if falling = falling?
+    if falling = should_fall?
       self.a = 0
       space.fall(self)
     end
@@ -145,23 +140,9 @@ class Player < Entity
     end
   end
 
-  def brake
-    if @x_vel.zero?
-      self.y_vel = brake_velocity(@y_vel)
-    else
-      self.x_vel = brake_velocity(@x_vel)
-    end
-  end
+  def brake; slow_by BRAKE_SPEED; end
 
-  def brake_velocity(v)
-    return 0 if v.abs < BRAKE_SPEED
-    sign = v <=> 0
-    sign * (v.abs - BRAKE_SPEED)
-  end
-
-  def flip
-    self.a += 180
-  end
+  def flip; self.a += 180; end
 
   # Create the actual pellet
   def fire(x_vel, y_vel)

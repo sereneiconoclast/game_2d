@@ -57,7 +57,7 @@ class Entity
     @grabbed = false
   end
 
-  def a=(angle); @a = angle % 360; end
+  def a=(angle); @a = (angle || 0) % 360; end
 
   def x_vel=(xv)
     @x_vel = constrain_velocity xv
@@ -133,6 +133,20 @@ class Entity
   def entities_obstructing(new_x, new_y)
     fail "No @space set!" unless @space
     opaque(@space.entities_overlapping(new_x, new_y))
+  end
+
+  def slow_by(amount)
+    if @x_vel.zero?
+      self.y_vel = slower_speed(@y_vel, amount)
+    else
+      self.x_vel = slower_speed(@x_vel, amount)
+    end
+  end
+
+  def slower_speed(current, delta)
+    return 0 if current.abs < delta
+    sign = current <=> 0
+    sign * (current.abs - delta)
   end
 
   # Process one tick of motion, horizontally only
@@ -246,6 +260,10 @@ class Entity
     @space.entities_at_points(points)
   end
 
+  def underfoot
+    opaque(next_to(self.a + 180))
+  end
+
   def empty_underneath?; opaque(next_to(180)).empty?; end
   def empty_on_left?; opaque(next_to(270)).empty?; end
   def empty_on_right?; opaque(next_to(90)).empty?; end
@@ -279,8 +297,14 @@ class Entity
 
   # Given a vector with a diagonal, drop the smaller component, returning a
   # vector that is strictly either horizontal or vertical.
-  def drop_diagonal(x_vel, y_vel)
+  def drop_diagonal(x_vel=@x_vel, y_vel=@y_vel)
     (y_vel.abs > x_vel.abs) ? [0, y_vel] : [x_vel, 0]
+  end
+
+  # Roughly speaking, are we going left, right, up, or down?
+  def direction
+    return nil if x_vel.zero? && y_vel.zero?
+    vector_to_angle(*drop_diagonal)
   end
 
   # Is the other entity basically above us, below us, or on the left or the

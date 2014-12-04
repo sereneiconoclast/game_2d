@@ -142,6 +142,7 @@ module GameClient
       ['Titanium',    make_block_npc_proc( 0) ],
       ['Teleporter',  make_teleporter_npc_proc],
       ['Hole',        make_hole_npc_proc      ],
+      ['Base',        make_base_npc_proc      ],
     ].collect do |type_name, p|
       MenuItem.new(type_name, self, @font) { @create_npc_proc = p }
     end
@@ -241,6 +242,7 @@ module GameClient
       when Gosu::Kb6 then @create_npc_proc = make_block_npc_proc( 0).call
       when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc.call
       when Gosu::Kb8 then @create_npc_proc = make_hole_npc_proc.call
+      when Gosu::Kb9 then @create_npc_proc = make_base_npc_proc.call
       when Gosu::KbDelete then send_delete_entity
       else @pressed_buttons << id unless @dialog
     end
@@ -317,6 +319,12 @@ module GameClient
     end
   end
 
+  def make_base_npc_proc
+    proc do
+      send_create_npc 'Entity::Base'
+    end
+  end
+
   def send_create_npc(type, args={})
     args.merge!(
       :class => type,
@@ -353,7 +361,7 @@ module GameClient
 
   # Dequeue an input event
   def handle_input
-    return if player.falling? || @dialog
+    return if player.should_fall? || @dialog
     move = move_for_keypress
     @conn.send_move move # also creates a delta in the engine
   end
