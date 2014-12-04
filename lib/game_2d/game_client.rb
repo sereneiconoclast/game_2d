@@ -253,9 +253,14 @@ module GameClient
       y_vel = -Math.sqrt(2 * (player.cy - y)).round
       x_vel = (player.cx - x) / y_vel
     else
-      range = x - player.cx
-      x_vel = (Math.sqrt(1.0 / (2.0 * (y - player.cy))) * range).round
       y_vel = 0
+      if y == player.cy
+        return if x == player.cx
+        x_vel = (x <=> player.cx) * MAX_VELOCITY
+      else
+        range = x - player.cx
+        x_vel = (Math.sqrt(1.0 / (2.0 * (y - player.cy))) * range).round
+      end
     end
     @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
   end

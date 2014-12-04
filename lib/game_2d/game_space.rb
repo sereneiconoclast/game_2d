@@ -5,7 +5,6 @@ require 'facets/kernel/try'
 require 'game_2d/wall'
 require 'game_2d/player'
 require 'game_2d/serializable'
-require 'game_2d/default_gravity'
 require 'game_2d/entity_constants'
 require 'game_2d/entity/owned_entity'
 
