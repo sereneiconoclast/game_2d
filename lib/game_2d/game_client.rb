@@ -14,7 +14,7 @@ require 'game_2d/entity/block'
 require 'game_2d/entity/titanium'
 require 'game_2d/entity/teleporter'
 require 'game_2d/entity/destination'
-require 'game_2d/player'
+require 'game_2d/entity/gecko'
 require 'game_2d/menu'
 require 'game_2d/message'
 require 'game_2d/password_dialog'
@@ -224,8 +224,8 @@ module GameClient
           # If handle_click returned anything, the menu consumed the click
           # If it returned a menu, that's the new one we display
           @menu = (new_menu.respond_to?(:handle_click) ? new_menu : @top_menu)
-        else
-          send_fire
+        elsif @player_id
+          generate_move_from_click
         end
       when Gosu::MsRight then # right-click
         if button_down?(Gosu::KbRightShift) || button_down?(Gosu::KbLeftShift)
@@ -248,23 +248,9 @@ module GameClient
     end
   end
 
-  def send_fire
-    return unless @player_id
-    x, y = mouse_coords
-    if y < player.cy # Firing up
-      y_vel = -Math.sqrt(2 * (player.cy - y)).round
-      x_vel = (player.cx - x) / y_vel
-    else
-      y_vel = 0
-      if y == player.cy
-        return if x == player.cx
-        x_vel = (x <=> player.cx) * MAX_VELOCITY
-      else
-        range = x - player.cx
-        x_vel = (Math.sqrt(1.0 / (2.0 * (y - player.cy))) * range).round
-      end
-    end
-    @conn.send_move :fire, :x_vel => x_vel, :y_vel => y_vel
+  def generate_move_from_click
+    move = player.generate_move_from_click(*mouse_coords)
+    @conn.send_move(*move) if move
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -371,23 +357,15 @@ module GameClient
   def move_for_keypress
     # Generated once for each keypress
     until @pressed_buttons.empty?
-      button = @pressed_buttons.shift
-      case button
-        when Gosu::KbUp, Gosu::KbW
-          return (player.building?) ? :rise_up : :flip
-      end
+      move = player.move_for_keypress(@pressed_buttons.shift)
+      return move if move
     end
 
     # Continuously-generated when key held down
-    case
-      when button_down?(Gosu::KbLeft), button_down?(Gosu::KbA)
-        :slide_left
-      when button_down?(Gosu::KbRight), button_down?(Gosu::KbD)
-        :slide_right
-      when button_down?(Gosu::KbRightControl), button_down?(Gosu::KbLeftControl)
-        :brake
-      when button_down?(Gosu::KbDown), button_down?(Gosu::KbS)
-        :build
+    player.moves_for_key_held.each do |key, move|
+      return move if button_down?(key)
     end
+
+    nil
   end
 end

@@ -41,7 +41,6 @@ module Serializable
     return nil unless json
     class_name = json[:class]
     raise "Suspicious class name: #{class_name}" unless
-      (class_name == 'Player') ||
       (class_name.start_with? 'Entity::') ||
       (class_name.start_with? 'Move::')
     require "game_2d/#{class_name.pathize}"

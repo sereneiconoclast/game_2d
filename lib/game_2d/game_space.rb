@@ -3,9 +3,10 @@ require 'delegate'
 require 'set'
 require 'facets/kernel/try'
 require 'game_2d/wall'
-require 'game_2d/player'
+require 'game_2d/entity/gecko'
 require 'game_2d/serializable'
 require 'game_2d/entity_constants'
+require 'game_2d/entity/base'
 require 'game_2d/entity/owned_entity'
 
 # Common code between the server and client for maintaining the world.
@@ -78,6 +79,7 @@ class GameSpace
 
     @players = []
     @npcs = []
+    @bases = []
     @gravities = []
   end
 
@@ -162,6 +164,9 @@ class GameSpace
   def width; @cell_width * WIDTH; end
   def height; @cell_height * HEIGHT; end
 
+  # Where to place an entity if you want it dead-center
+  def center; [(width - Entity::WIDTH) / 2, (height - Entity::HEIGHT) / 2]; end
+
   def next_id
     "R#{@highest_id += 1}".to_sym
   end
@@ -204,6 +209,7 @@ class GameSpace
     entity_list(entity) << entity
     register_with_owner(entity)
     register_gravity(entity)
+    register_base(entity)
     nil
   end
 
@@ -216,6 +222,7 @@ class GameSpace
 
   def deregister(entity)
     fail "#{entity} not registered" unless registered?(entity)
+    deregister_base(entity)
     deregister_gravity(entity)
     deregister_ownership(entity)
     entity_list(entity).delete entity
@@ -239,8 +246,36 @@ class GameSpace
     @gravities.unshift entity.registry_id
   end
 
+  def register_base(entity)
+    return unless entity.is_a? Entity::Base
+    @bases.unshift entity.registry_id
+  end
+
   def deregister_gravity(entity)
     @gravities.delete entity.registry_id
+  end
+
+  def deregister_base(entity)
+    @bases.delete entity.registry_id
+  end
+
+  # Return a "randomly" chosen unblocked base, or nil
+  def unoccupied_base
+    choices = @bases.collect {|id| self[id] }.find_all do |b|
+      # Can't use entity.entities_obstructing() here, as that only
+      # returns objects opaque to the receiver (the base).  Players
+      # aren't opaque to bases.  We need to ensure there are no
+      # solid (non-ghost) players occupying the space.
+      #
+      # This logic depends on the fact that anything transparent
+      # to a base is also transparent to a player.  If we ever allow
+      # a base to go somewhere a player can't be, that's a problem.
+      entities_overlapping(b.x, b.y).find_all do |e|
+        e.is_a?(Player) && !e.is_a?(Entity::Ghost)
+      end.empty?
+    end
+    return nil if choices.empty?
+    choices.size == 1 ? choices.first : choices[game.tick % choices.size]
   end
 
   def owner_change(owned_id, old_owner_id, new_owner_id)

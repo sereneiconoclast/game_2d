@@ -387,9 +387,17 @@ class Entity
 
   def draw_zorder; ZOrder::Objects end
 
+  def draw_animation(window)
+    window.animation[window.media(image_filename)]
+  end
+
+  def draw_image(anim)
+    anim[Gosu::milliseconds / 100 % anim.size]
+  end
+
   def draw(window)
-    anim = window.animation[window.media(image_filename)]
-    img = anim[Gosu::milliseconds / 100 % anim.size]
+    img = draw_image(draw_animation(window))
+
     # Entity's pixel_x/pixel_y is the location of the upper-left corner
     # draw_rot wants us to specify the point around which rotation occurs
     # That should be the center

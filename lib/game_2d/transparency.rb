@@ -2,6 +2,7 @@ require 'game_2d/entity'
 require 'game_2d/entity/base'
 require 'game_2d/entity/block'
 require 'game_2d/entity/destination'
+require 'game_2d/entity/ghost'
 require 'game_2d/entity/hole'
 require 'game_2d/entity/owned_entity'
 require 'game_2d/entity/teleporter'
@@ -10,14 +11,21 @@ require 'game_2d/wall'
 
 module Transparency
   def transparent?(one, two)
-    # Walls and titanium: transparent to absolutely nothing
+    # Walls: transparent to absolutely nothing
     return false if wall?(one) || wall?(two)
 
-    # Holes and teleporter destinations: transparent to everything
-    return true if transparent_to_all?(one) || transparent_to_all?(two)
+    # Ghosts: transparent to everything except a wall
+    return true if ghost?(one) || ghost?(two)
+
+    # Titanium: transparent to nothing except ghosts
+    return false if titanium?(one) || titanium?(two)
+
+    # Holes and teleporter destinations: transparent to
+    # everything except walls and titanium
+    return true if transparent_to_most?(one) || transparent_to_most?(two)
 
     # Teleporters: transparent to everything except other
-    # teleporters, and destinations
+    # teleporters
     return teleporter_ok?(two) if teleporter?(one)
     return teleporter_ok?(one) if teleporter?(two)
 
@@ -30,7 +38,7 @@ module Transparency
     return player?(two) if base?(one)
     return player?(one) if base?(two)
 
-    # Should only get here if both objects are players
+    # Should only get here if both objects are non-ghost players
     fail("Huh?  one=#{one}, two=#{two}") unless
       one.is_a?(Player) && two.is_a?(Player)
     false
@@ -38,7 +46,11 @@ module Transparency
 
   private
   def wall?(entity)
-    entity.is_a?(Wall) || entity.is_a?(Entity::Titanium)
+    entity.is_a?(Wall)
+  end
+
+  def titanium?(entity)
+    entity.is_a?(Entity::Titanium)
   end
 
   def teleporter_ok?(other)
@@ -49,7 +61,7 @@ module Transparency
     entity.is_a?(Entity::Teleporter)
   end
 
-  def transparent_to_all?(entity)
+  def transparent_to_most?(entity)
     entity.is_a?(Entity::Destination) || entity.is_a?(Entity::Hole)
   end
 
@@ -69,5 +81,9 @@ module Transparency
 
   def player?(entity)
     entity.is_a? Player
+  end
+
+  def ghost?(entity)
+    entity.is_a? Entity::Ghost
   end
 end

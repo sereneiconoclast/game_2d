@@ -9,7 +9,8 @@ require 'game_2d/server_port'
 require 'game_2d/game_space'
 require 'game_2d/serializable'
 require 'game_2d/entity'
-require 'game_2d/player'
+require 'game_2d/entity/gecko'
+require 'game_2d/entity/ghost'
 
 WORLD_WIDTH = 100 # in cells
 WORLD_HEIGHT = 70 # in cells
@@ -38,6 +39,9 @@ class Game
         nil, # level ID
         args[:width] || WORLD_WIDTH,
         args[:height] || WORLD_HEIGHT)
+
+      @space << Entity::Base.new(*@space.center)
+
       @space.storage = level_storage
     else
       @space = GameSpace.load(self, level_storage)
@@ -95,9 +99,14 @@ class Game
   end
 
   def add_player(player_name)
-    player = Player.new(player_name)
-    player.x = (@space.width - Entity::WIDTH) / 2
-    player.y = (@space.height - Entity::HEIGHT) / 2
+    if base = @space.unoccupied_base
+      player = Entity::Gecko.new(player_name)
+      player.x, player.y, player.a = base.x, base.y, base.a
+    else
+      player = Entity::Ghost.new(player_name)
+      player.x, player.y = @space.center
+    end
+
     other_players = @space.players.dup
     @space << player
     other_players.each {|p| pc = player_connection(p) and pc.add_player(player, @tick) }

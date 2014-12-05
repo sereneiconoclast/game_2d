@@ -1,0 +1,111 @@
+require 'facets/kernel/try'
+require 'game_2d/entity'
+require 'game_2d/entity/pellet'
+require 'game_2d/entity/block'
+require 'game_2d/move/rise_up'
+require 'game_2d/player'
+
+# A player object that represents the player when between corporeal
+# incarnations
+#
+# Ghost can fly around and look at things, but can't touch or affect
+# anything
+class Entity
+
+class Ghost < Entity
+  include Player
+  include Comparable
+
+  MOVES_FOR_KEY_HELD = {
+    Gosu::KbLeft  => :left,
+    Gosu::KbA     => :left,
+    Gosu::KbRight => :right,
+    Gosu::KbD     => :right,
+    Gosu::KbUp    => :up,
+    Gosu::KbW     => :up,
+    Gosu::KbDown  => :down,
+    Gosu::KbS     => :down,
+  }
+
+  def initialize(player_name = "<unknown>")
+    super
+    initialize_player
+    @player_name = player_name
+    @score = 0
+  end
+
+  def sleep_now?; false; end
+
+  def should_fall?; false; end
+
+  def update
+    fail "No space set for #{self}" unless @space
+
+    if args = next_move
+      case (current_move = args.delete(:move).to_sym)
+        when :left, :right, :up, :down
+          send current_move
+        else
+          puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
+      end
+    else
+      slow_by 1
+    end
+    super
+  end
+
+  def left; accelerate(-1, 0); end
+  def right; accelerate(1, 0); end
+  def up; accelerate(0, -1); end
+  def down; accelerate(0, 1); end
+
+  # Called by GameWindow
+  # Should return a map where the keys are... keys, and the
+  # values are the corresponding moves to be sent via
+  # ClientConnection
+  # This is for non-queued keypresses, i.e. those that happen
+  # continuously for as long as held down
+  def moves_for_key_held
+    MOVES_FOR_KEY_HELD
+  end
+
+  # Called by GameWindow
+  # Should return the move to be sent via ClientConnection
+  # (or nil)
+  # This is for queued keypresses, i.e. those that happen
+  # on key-down only (just once for a press), not continuously
+  # for as long as held down
+  def move_for_keypress(keypress); nil; end
+
+  # Called by GameWindow
+  # Should return the move to be sent via ClientConnection
+  # (or nil)
+  def generate_move_from_click(x, y); nil; end
+
+  def all_state
+    # Player name goes first, so we can sort on that
+    super.unshift(player_name).push(score)
+  end
+
+  def as_json
+    super.merge!(
+      :player_name => player_name,
+      :score => score
+    )
+  end
+
+  def update_from_json(json)
+    @player_name = json[:player_name] if json[:player_name]
+    @score = json[:score] if json[:score]
+    super
+  end
+
+  def image_filename; "ghost.png"; end
+
+  def draw_image(anim)
+    # Usually frame 0, occasionally frame 1
+    anim[((Gosu::milliseconds / 100) % 63) / 62]
+  end
+end
+
+end
