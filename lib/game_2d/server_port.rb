@@ -10,7 +10,7 @@ class ServerPort
     puts "ENet server listening on #{port_number}"
 
     @clients = {}
-    @player_connections = {}
+    @player_connections = {} # player_name => ServerConnection
     @new_players = Set.new
 
     @server.on_connection method(:on_connection)
@@ -34,17 +34,26 @@ class ServerPort
   def on_disconnection(id)
     puts "ENet connection #{id} disconnected"
     gone = @clients.delete id
-    gone.close
+    deregister_player(gone)
     puts "Remaining connection IDs: #{@clients.keys.sort.join(', ')}"
   end
 
-  def register_player(player_id, conn)
-    @player_connections[player_id] = conn
-    @new_players << player_id
+  def register_player(player_name, conn)
+    if old_conn = @player_connections[player_name]
+      warn "Disconnecting old connection for #{player_name} (#{old_conn})"
+      old_conn.disconnect!
+    end
+    @player_connections[player_name] = conn
+    @new_players << player_name
   end
 
-  def deregister_player(player_id)
-    @player_connections.delete player_id
+  def deregister_player(conn)
+    player_name = conn.player_name
+    if conn.authenticated? && @player_connections[player_name] == conn
+      puts "Player #{player_name} logged out at <#{@game.tick}>"
+      @player_connections.delete player_name
+      conn.close
+    end
   end
 
   def new_players
@@ -53,17 +62,17 @@ class ServerPort
     copy
   end
 
-  def player_connection(player_id)
-    @player_connections[player_id]
+  def player_name_connection(player_name)
+    @player_connections[player_name]
   end
 
   # Re-broadcast to everyone except the original sender
-  def broadcast_player_action(hash, channel)
-    sender_player_id = hash[:player_id]
-    fail "No player_id in #{hash.inspect}" unless sender_player_id
+  def broadcast_player_action(hash, channel=0)
+    sender_player_name = hash[:player_name]
+    fail "No player_name in #{hash.inspect}" unless sender_player_name
     data = hash.to_json
-    @player_connections.each do |player_id, conn|
-      @server.send_packet(conn.id, data, false, channel) unless player_id == sender_player_id
+    @player_connections.each do |player_name, conn|
+      @server.send_packet(conn.id, data, false, channel) unless player_name == sender_player_name
     end
     @server.flush
   end

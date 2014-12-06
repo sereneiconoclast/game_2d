@@ -99,26 +99,33 @@ class Game
   end
 
   def add_player(player_name)
-    if base = @space.unoccupied_base
+    if base = @space.available_base
       player = Entity::Gecko.new(player_name)
       player.x, player.y, player.a = base.x, base.y, base.a
     else
       player = Entity::Ghost.new(player_name)
       player.x, player.y = @space.center
     end
-
-    other_players = @space.players.dup
     @space << player
-    other_players.each {|p| pc = player_connection(p) and pc.add_player(player, @tick) }
+
+    each_player_conn do |c|
+      c.add_player(player, @tick) unless c.player_name == player_name
+    end
     player
   end
 
-  def player_id_connection(player_id)
-    @port.player_connection(player_id)
+  def replace_player_entity(player_name, new_player_id)
+    conn = player_name_connection(player_name)
+    old = conn.player_id
+    conn.player_id = new_player_id
+  end
+
+  def player_name_connection(player_name)
+    @port.player_name_connection(player_name)
   end
 
   def player_connection(player)
-    player_id_connection(player.registry_id)
+    player_name_connection(player.player_name)
   end
 
   def each_player_conn
@@ -149,7 +156,7 @@ class Game
         entity.update_from_json json
         entity.grab!
       else
-        $stderr.puts "Can't update #{id}, doesn't exist"
+        warn "Can't update #{id}, doesn't exist"
       end
     end
   end
@@ -171,13 +178,13 @@ class Game
   end
 
   def add_player_action(action)
-    at_tick, player_id = action[:at_tick], action[:player_id]
+    at_tick, player_name = action[:at_tick], action[:player_name]
     unless at_tick
-      $stderr.puts "Received update from #{player_id} without at_tick!"
+      warn "Received update from #{player_name} without at_tick!"
       at_tick = @tick + 1
     end
     if at_tick <= @tick
-      $stderr.puts "Received update from #{player_id} #{@tick + 1 - at_tick} ticks late"
+      warn "Received update from #{player_name} #{@tick + 1 - at_tick} ticks late"
       at_tick = @tick + 1
     end
     @player_actions[at_tick] << action
@@ -186,10 +193,16 @@ class Game
   def process_player_actions
     if actions = @player_actions.delete(@tick)
       actions.each do |action|
-        player_id = action.delete :player_id
+        player_name = action.delete :player_name
+        conn = player_name_connection(player_name)
+        unless conn
+          warn "No connection -- dropping move from #{player_name}"
+          next
+        end
+        player_id = conn.player_id
         player = @space[player_id]
         unless player
-          $stderr.puts "No such player #{player_id} -- dropping move"
+          warn "No such player #{player_id} -- dropping move from #{player_name}"
           next
         end
         if (move = action[:move])
@@ -203,7 +216,7 @@ class Game
         elsif (entity_id = action[:snap_to_grid])
           @space.snap_to_grid entity_id.to_sym
         else
-          $stderr.puts "IGNORING BAD DATA from #{player}: #{action.inspect}"
+          warn "IGNORING BAD DATA from #{player_name}: #{action.inspect}"
         end
       end
     end
@@ -243,10 +256,11 @@ class Game
   # N == @registry_broadcast_every
   def send_full_updates
     # Set containing brand-new players' IDs
+    # This is cleared after we read it
     new_players = @port.new_players
 
     each_player_conn do |pc|
-      if new_players.include? pc.player_id
+      if new_players.include? pc.player_name
         response = {
           :you_are => pc.player_id,
           :world => {
@@ -280,7 +294,7 @@ class Game
         # This results in something approaching TICKS_PER_SECOND
         @port.update_until(run_start + Rational(@tick, TICKS_PER_SECOND))
 
-        $stderr.puts "Updates per second: #{@tick / (Time.now.to_r - run_start)}" if @profile
+        warn "Updates per second: #{@tick / (Time.now.to_r - run_start)}" if @profile
       end # times
     end # infinite loop
   end # run

@@ -108,9 +108,9 @@ class ClientConnection
     if you_are
       # The 'world' response includes deltas for add_players and add_npcs
       # Need to process those first, as one of the players is us
-      @engine.apply_deltas(at_tick)
+      @engine.apply_deltas(at_tick) if world
 
-      @engine.create_local_player you_are
+      @game.player_id = you_are
     end
 
     @engine.sync_registry(registry, highest_id, at_tick) if registry
@@ -120,12 +120,12 @@ class ClientConnection
     @engine.tick + ACTION_DELAY
   end
 
-  def send_move(move, args={})
+  def send_move(player_id, move, args={})
     return unless move && online?
     args[:move] = move.to_s
     delta = { :at_tick => send_actions_at, :move => args }
     send_record delta
-    delta[:player_id] = @engine.player_id
+    delta[:player_id] = player_id
     @engine.add_delta delta
   end
 

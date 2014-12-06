@@ -20,9 +20,9 @@ class Teleporter < Entity
             overlap.wake!
           end
         when 0 then
-          $stderr.puts "#{self}: No destination"
+          warn "#{self}: No destination"
         else
-          $stderr.puts "#{self}: Multiple destinations: #{dest.inspect}"
+          warn "#{self}: Multiple destinations: #{dest.inspect}"
       end
     end
   end
@@ -36,6 +36,7 @@ class Teleporter < Entity
   def draw_zorder; ZOrder::Teleporter end
 
   def to_s
+    return "#{super} [not in a space]" unless space
     destinations = space.possessions(self).collect do |d|
       "#{d.x}x#{d.y}"
     end.join(', ')

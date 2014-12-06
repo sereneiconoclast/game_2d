@@ -14,11 +14,19 @@ class ServerConnection
   def initialize(port, game, server, id, remote_addr)
     @port, @game, @server, @id, @remote_addr = port, game, server, id, remote_addr
     puts "ServerConnection: New connection #{id} from #{remote_addr}"
+    @authenticated = false
   end
 
-  attr_reader :id, :player_id
+  attr_reader :id, :player_name, :authenticated
+  attr_accessor :player_id
+  def authenticated?; @authenticated; end
 
   def answer_handshake(handshake)
+    if authenticated?
+      warn "#{self} cannot re-handshake"
+      disconnect!
+      return
+    end
     @player_name = handshake[:player_name]
     dh_public_key = handshake[:dh_public_key]
     client_public_key = handshake[:client_public_key]
@@ -32,24 +40,30 @@ class ServerConnection
   end
 
   def answer_login(b64_password_hash, b64_iv)
+    if authenticated?
+      warn "#{self} cannot re-login"
+      disconnect!
+      return
+    end
     password_hash = decrypt(
       strict_decode64(b64_password_hash),
       strict_decode64(b64_iv))
     player_data = @game.player_data(@player_name)
     if player_data
       unless password_hash == player_data[:password_hash]
-        $stderr.puts "Wrong password for #{@player_name} (#{password_hash} != #{player_data[:password_hash]})"
+        warn "Wrong password for #{@player_name} (#{password_hash} != #{player_data[:password_hash]})"
         disconnect!
         return
       end
     else # new player
       @game.store_player_data @player_name, :password_hash => password_hash
     end
+    @authenticated = true
 
+    @port.register_player @player_name, self
     player = @game.add_player(@player_name)
     @player_id = player.registry_id
-    @port.register_player @player_id, self
-    puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
+    puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>, becomes #{@player_id}"
 
     # We don't send the registry here.  The Game will do it after
     # all logins have been processed and the update has completed.
@@ -82,15 +96,11 @@ class ServerConnection
 
   # Not called yet...
   def update_score(player, at_tick)
-    send_record :update_score => { player.registry_id => player.score }, :at_tick => at_tick
+    send_record :update_score => { player.player_name => player.score }, :at_tick => at_tick
   end
 
   def close
-    return unless @player_id
-    @port.deregister_player @player_id
-    toast = player
-    puts "#{toast} -- #{@remote_addr} disconnected at <#{@game.tick}>"
-    @game.send_player_gone toast
+    @game.send_player_gone player
   end
 
   def on_packet(data, channel)
@@ -100,18 +110,18 @@ class ServerConnection
       answer_handshake(handshake)
     elsif password_hash = hash.delete(:password_hash)
       answer_login(password_hash, hash.delete(:iv))
-    elsif hash.delete(:save)
-      @game.save
     elsif ping = hash.delete(:ping)
       answer_ping ping
+    elsif !authenticated?
+      warn "Ignoring #{hash.inspect}, not authenticated"
+    elsif hash.delete(:save)
+      @game.save
     else
-      if hash[:player_id] = @player_id
-        @game.add_player_action hash
-        # TODO: Validate
-        @port.broadcast_player_action hash, channel
-      else
-        $stderr.puts "Ignoring move #{hash.inspect}, no player_id for this connection"
-      end
+      hash[:player_name] = @player_name
+      hash[:player_id] = @player_id
+      @game.add_player_action hash
+      # TODO: Validate
+      @port.broadcast_player_action hash, channel
     end
   end
 
@@ -132,5 +142,9 @@ class ServerConnection
 
   def disconnect!
     @server.disconnect_client(@id)
+  end
+
+  def to_s
+    "#{@player_name || '??'} ##{@id} from #{@remote_addr}"
   end
 end

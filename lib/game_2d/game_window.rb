@@ -43,9 +43,9 @@ class GameWindow < Gosu::Window
       ZOrder::Cursor,
       1, 1, Gosu::Color::WHITE, :add)
 
-    return unless @player_id
+    return unless p = player
 
-    @camera_x, @camera_y = space.good_camera_position_for(player, SCREEN_WIDTH, SCREEN_HEIGHT)
+    @camera_x, @camera_y = space.good_camera_position_for(p, SCREEN_WIDTH, SCREEN_HEIGHT)
     translate(-@camera_x, -@camera_y) do
       (space.players + space.npcs).each {|entity| entity.draw(self) }
     end

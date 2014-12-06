@@ -1,8 +1,5 @@
-require 'facets/kernel/try'
 require 'game_2d/entity'
-require 'game_2d/entity/pellet'
-require 'game_2d/entity/block'
-require 'game_2d/move/rise_up'
+require 'game_2d/move/spawn'
 require 'game_2d/player'
 
 # A player object that represents the player when between corporeal
@@ -41,10 +38,14 @@ class Ghost < Entity
   def update
     fail "No space set for #{self}" unless @space
 
+    return if perform_complex_move
+
     if args = next_move
       case (current_move = args.delete(:move).to_sym)
         when :left, :right, :up, :down
           send current_move
+        when :spawn
+          spawn args[:x], args[:y]
         else
           puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
       end
@@ -58,6 +59,14 @@ class Ghost < Entity
   def right; accelerate(1, 0); end
   def up; accelerate(0, -1); end
   def down; accelerate(0, 1); end
+
+  def spawn(x, y)
+    if base = @space.available_base_near(x, y)
+      warn "#{self} spawning at #{base.x}, #{base.y}"
+      self.complex_move = Move::Spawn.new
+      self.complex_move.target_id = base.registry_id
+    end
+  end
 
   # Called by GameWindow
   # Should return a map where the keys are... keys, and the
@@ -80,23 +89,27 @@ class Ghost < Entity
   # Called by GameWindow
   # Should return the move to be sent via ClientConnection
   # (or nil)
-  def generate_move_from_click(x, y); nil; end
+  def generate_move_from_click(x, y)
+    [:spawn, {:x => x, :y => y}]
+  end
 
   def all_state
     # Player name goes first, so we can sort on that
-    super.unshift(player_name).push(score)
+    super.unshift(player_name).push(score, @complex_move)
   end
 
   def as_json
     super.merge!(
       :player_name => player_name,
-      :score => score
+      :score => score,
+      :complex_move => @complex_move.as_json
     )
   end
 
   def update_from_json(json)
     @player_name = json[:player_name] if json[:player_name]
     @score = json[:score] if json[:score]
+    @complex_move = Serializable.from_json(json[:complex_move]) if json[:complex_move]
     super
   end
 

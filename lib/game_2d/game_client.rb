@@ -46,8 +46,7 @@ module GameClient
   DEFAULT_PORT = 4321
   DEFAULT_KEY_SIZE = 1024
 
-  attr_reader :animation, :font, :top_menu
-  attr_accessor :player_id
+  attr_reader :animation, :font, :top_menu, :player_id
 
   def initialize_from_hash(opts = {})
     player_name = opts[:name]
@@ -60,7 +59,7 @@ module GameClient
     @conn_update_count = @engine_update_count = 0
     @profile = profile
 
-    self.caption = "Game 2D"
+    self.caption = "Game 2D - #{player_name} on #{hostname}"
 
     @pressed_buttons = []
 
@@ -82,6 +81,8 @@ module GameClient
   def _make_client_connection(*args)
     ClientConnection.new(*args)
   end
+
+  def player_id=(id); @player_id = id.to_sym; end
 
   def display_message(*lines)
     if @message
@@ -161,7 +162,7 @@ module GameClient
   end
 
   def player
-    space[@player_id]
+    space && space[@player_id]
   end
 
   def update
@@ -175,7 +176,7 @@ module GameClient
     if @profile
       @conn_update_total += (Time.now.to_f - before_t)
       @conn_update_count += 1
-      $stderr.puts "@conn.update() averages #{@conn_update_total / @conn_update_count} seconds each" if (@conn_update_count % 60) == 0
+      warn "@conn.update() averages #{@conn_update_total / @conn_update_count} seconds each" if (@conn_update_count % 60) == 0
     end
     return unless @engine.world_established?
 
@@ -184,7 +185,7 @@ module GameClient
     if @profile
       @engine_update_total += (Time.now.to_f - before_t)
       @engine_update_count += 1
-      $stderr.puts "@engine.update() averages #{@engine_update_total / @engine_update_count} seconds" if (@engine_update_count % 60) == 0
+      warn "@engine.update() averages #{@engine_update_total / @engine_update_count} seconds" if (@engine_update_count % 60) == 0
     end
 
     # Player at the keyboard queues up a command
@@ -193,7 +194,7 @@ module GameClient
 
     move_grabbed_entity
 
-    $stderr.puts "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile
+    warn "Updates per second: #{@update_count / (Time.now.to_f - @run_start)}" if @profile
   end
 
   def move_grabbed_entity(divide_by = ClientConnection::ACTION_DELAY)
@@ -250,7 +251,7 @@ module GameClient
 
   def generate_move_from_click
     move = player.generate_move_from_click(*mouse_coords)
-    @conn.send_move(*move) if move
+    @conn.send_move(player_id, *move) if move
   end
 
   # X/Y position of the mouse (center of the crosshairs), adjusted for camera
@@ -347,9 +348,10 @@ module GameClient
 
   # Dequeue an input event
   def handle_input
+    return unless player # can happen when spawning
     return if player.should_fall? || @dialog
     move = move_for_keypress
-    @conn.send_move move # also creates a delta in the engine
+    @conn.send_move player_id, move # also creates a delta in the engine
   end
 
   # Check keyboard, mouse, and pressed-button queue

@@ -259,23 +259,20 @@ class GameSpace
     @bases.delete entity.registry_id
   end
 
-  # Return a "randomly" chosen unblocked base, or nil
-  def unoccupied_base
-    choices = @bases.collect {|id| self[id] }.find_all do |b|
-      # Can't use entity.entities_obstructing() here, as that only
-      # returns objects opaque to the receiver (the base).  Players
-      # aren't opaque to bases.  We need to ensure there are no
-      # solid (non-ghost) players occupying the space.
-      #
-      # This logic depends on the fact that anything transparent
-      # to a base is also transparent to a player.  If we ever allow
-      # a base to go somewhere a player can't be, that's a problem.
-      entities_overlapping(b.x, b.y).find_all do |e|
-        e.is_a?(Player) && !e.is_a?(Entity::Ghost)
-      end.empty?
-    end
-    return nil if choices.empty?
-    choices.size == 1 ? choices.first : choices[game.tick % choices.size]
+  # Return a list of available bases, for a player to (re)spawn
+  def available_bases
+    @bases.collect {|id| self[id] }.find_all(&:available?)
+  end
+
+  # Return a "randomly" chosen available base, or nil
+  def available_base
+    choices = available_bases
+    choices.empty? ? nil : choices[game.tick % choices.size]
+  end
+
+  # Return the available base closest to the coordinates, or nil
+  def available_base_near(x, y)
+    nearest_to(available_bases, x, y)
   end
 
   def owner_change(owned_id, old_owner_id, new_owner_id)
@@ -351,6 +348,15 @@ class GameSpace
     delta_x = (x1 - x2).abs
     delta_y = (y1 - y2).abs
     Math.sqrt(delta_x**2 + delta_y**2)
+  end
+
+  # Consider a given list of entities
+  # Return whichever entity's center is closest (or ties for closest)
+  # to the given coordinates
+  def nearest_to(entities, x, y)
+    entities.collect do |entity|
+      [distance_between(entity.cx, entity.cy, x, y), entity]
+    end.sort {|(d1, e1), (d2, e2)| d1 <=> d2}.first.try(:last)
   end
 
   # Consider all entities intersecting with (x, y)
@@ -468,13 +474,13 @@ class GameSpace
     else
       entity.space = nil
       # TODO: Convey error to user somehow
-      $stderr.puts "Can't create #{entity}, occupied by #{conflicts.inspect}"
+      warn "Can't create #{entity}, occupied by #{conflicts.inspect}"
     end
   end
 
   def snap_to_grid(entity_id)
     unless entity = self[entity_id]
-      $stderr.puts "Can't snap #{entity_id}, doesn't exist"
+      warn "Can't snap #{entity_id}, doesn't exist"
       return
     end
 
@@ -492,7 +498,7 @@ class GameSpace
         return
       end
     end
-    $stderr.puts "Couldn't snap #{entity} to grid"
+    warn "Couldn't snap #{entity} to grid"
   end
 
   def fall(entity)

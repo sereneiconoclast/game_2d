@@ -14,6 +14,8 @@ class Gecko < Entity
   include Player
   include Comparable
 
+  MAX_HP = 1
+
   # Game ticks it takes before a block's HP is raised by 1
   BUILD_TIME = 7
 
@@ -31,17 +33,19 @@ class Gecko < Entity
     Gosu::KbS            => :build,
   }
 
-  attr_reader :build_block_id
+  attr_reader :hp, :build_block_id
 
   def initialize(player_name = "<unknown>")
     super
     initialize_player
     @player_name = player_name
     @score = 0
+    @hp = MAX_HP
     @build_block_id = nil
     @build_level = 0
-    @complex_move = nil
   end
+
+  def hp=(p); @hp = [[p, MAX_HP].min, 0].max; end
 
   def sleep_now?; false; end
 
@@ -59,6 +63,12 @@ class Gecko < Entity
     @space[@build_block_id] or fail "Don't have build_block #{@build_block_id}"
   end
 
+  def harmed_by(other, damage=1)
+    puts "#{self}: Ouch!"
+    self.hp -= damage
+    die if hp <= 0
+  end
+
   def destroy!
     build_block.owner_id = nil if building?
   end
@@ -67,12 +77,7 @@ class Gecko < Entity
     fail "No space set for #{self}" unless @space
     check_for_disown_block
 
-    if @complex_move
-      # returns true if more work to do
-      return if @complex_move.update(self)
-      @complex_move.on_completion(self)
-      @complex_move = nil
-    end
+    return if perform_complex_move
 
     if falling = should_fall?
       self.a = 0
@@ -171,13 +176,14 @@ class Gecko < Entity
       bb = Entity::Block.new(@x, @y)
       bb.owner_id = registry_id
       bb.hp = 1
-      @space << bb # generates an ID
-      @build_block_id = bb.registry_id
-      @build_level = 0
+      if @space << bb # generates an ID
+        @build_block_id = bb.registry_id
+        @build_level = 0
+      end
     end
   end
 
-  def disown_block; $stderr.puts "#{self} disowning #{build_block}"; @build_block_id, @build_level = nil, 0; end
+  def disown_block; @build_block_id, @build_level = nil, 0; end
 
   def check_for_disown_block
     return unless building?
@@ -188,7 +194,7 @@ class Gecko < Entity
   end
 
   def rise_up
-    @complex_move = Move::RiseUp.new(self)
+    self.complex_move = Move::RiseUp.new(self)
   end
 
   # Called by GameWindow
@@ -237,13 +243,14 @@ class Gecko < Entity
   def all_state
     # Player name goes first, so we can sort on that
     super.unshift(player_name).push(
-      score, build_block_id, @complex_move)
+      score, @hp, build_block_id, @complex_move)
   end
 
   def as_json
     super.merge!(
       :player_name => player_name,
       :score => score,
+      :hp => @hp,
       :build_block => @build_block_id,
       :complex_move => @complex_move.as_json
     )
@@ -252,6 +259,7 @@ class Gecko < Entity
   def update_from_json(json)
     @player_name = json[:player_name] if json[:player_name]
     @score = json[:score] if json[:score]
+    @hp = json[:hp] if json[:hp]
     @build_block_id = json[:build_block].try(:to_sym) if json[:build_block]
     @complex_move = Serializable.from_json(json[:complex_move]) if json[:complex_move]
     super

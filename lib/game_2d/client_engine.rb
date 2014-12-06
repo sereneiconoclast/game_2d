@@ -78,7 +78,7 @@ class ClientEngine
     end
 
     if @tick - @earliest_tick >= MAX_LEAD_TICKS
-      $stderr.puts "Lost connection?  Running ahead of server?"
+      warn "Lost connection?  Running ahead of server?"
       return space_at(@tick)
     end
     space_at(@tick += 1)
@@ -88,25 +88,13 @@ class ClientEngine
     @spaces[@tick]
   end
 
-  def create_local_player(player_id)
-    old_player_id = @game_window.player_id
-    fail "Already have player #{old_player_id}!?" if old_player_id
-
-    @game_window.player_id = player_id
-    puts "I am player #{player_id}"
-  end
-
-  def player_id
-    @game_window.player_id
-  end
-
   def add_delta(delta)
-    at_tick = delta.delete :at_tick
+    at_tick = delta[:at_tick]
     fail "Received delta without at_tick: #{delta.inspect}" unless at_tick
     if at_tick < @tick
-      $stderr.puts "Received delta #{@tick - at_tick} ticks late"
+      warn "Received delta #{@tick - at_tick} ticks late"
       if at_tick <= @earliest_tick
-        $stderr.puts "Discarding it - we've received registry sync at <#{@earliest_tick}>"
+        warn "Discarding it - we've received registry sync at <#{@earliest_tick}>"
         return
       end
       # Invalidate old spaces that were generated without this information
@@ -135,6 +123,7 @@ class ClientEngine
       add_npcs(space, npcs) if npcs
 
       move = hash.delete :move
+      player_name = hash.delete :player_name
       player_id = hash.delete :player_id
       if move
         fail "No player_id sent with move #{move.inspect}" unless player_id
@@ -144,7 +133,8 @@ class ClientEngine
       score_update = hash.delete :update_score
       update_score(space, score_update) if score_update
 
-      $stderr.puts "Unprocessed deltas: #{hash.keys.join(', ')}" unless hash.empty?
+      leftovers = hash.keys - [:at_tick]
+      warn "Unprocessed deltas: #{leftovers.join(', ')}" unless leftovers.empty?
     end
   end
 
