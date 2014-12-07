@@ -151,8 +151,13 @@ class ClientEngine
 
   def apply_move(space, move, player_id)
     player = space[player_id]
-    fail "No such player #{player_id}, can't apply #{move.inspect}" unless player
-    player.add_move move
+    if player
+      player.add_move move
+    else
+      # This can happen if, say, the player sent an action just before
+      # death or disconnection.
+      warn "No such player #{player_id}, can't apply #{move.inspect}"
+    end
   end
 
   def add_npcs(space, npcs)
@@ -164,7 +169,15 @@ class ClientEngine
   end
 
   def add_entity(space, json)
-    space << Serializable.from_json(json)
+    space << (o = Serializable.from_json(json))
+    if o.is_a?(Player) && @game_window.player_name == o.player_name
+      # This can be news, if the server is ahead of us.  The server
+      # promises that we always have exactly one entity assigned to
+      # each authenticated player, and each connected player must
+      # have a unique name at any time -- so this entity has to be
+      # ours.
+      @game_window.player_id = o.registry_id
+    end
   end
 
   # Returns the set of registry IDs updated or added

@@ -46,10 +46,10 @@ module GameClient
   DEFAULT_PORT = 4321
   DEFAULT_KEY_SIZE = 1024
 
-  attr_reader :animation, :font, :top_menu, :player_id
+  attr_reader :animation, :font, :top_menu, :player_name, :player_id
 
   def initialize_from_hash(opts = {})
-    player_name = opts[:name]
+    @player_name = opts[:name]
     hostname = opts[:hostname]
     port = opts[:port] || DEFAULT_PORT
     key_size = opts[:key_size] || DEFAULT_KEY_SIZE
@@ -59,7 +59,7 @@ module GameClient
     @conn_update_count = @engine_update_count = 0
     @profile = profile
 
-    self.caption = "Game 2D - #{player_name} on #{hostname}"
+    self.caption = "Game 2D - #{@player_name} on #{hostname}"
 
     @pressed_buttons = []
 
@@ -72,7 +72,7 @@ module GameClient
     @run_start = Time.now.to_f
     @update_count = 0
 
-    @conn = _make_client_connection(hostname, port, self, player_name, key_size)
+    @conn = _make_client_connection(hostname, port, self, @player_name, key_size)
     @engine = @conn.engine = ClientEngine.new(self)
     @menu = build_top_menu
     @dialog = PasswordDialog.new(self, @font)
@@ -162,7 +162,9 @@ module GameClient
   end
 
   def player
-    space && space[@player_id]
+    return unless space
+    warn "GameClient#player(): No such entity #{@player_id}" unless space[@player_id]
+    space[@player_id]
   end
 
   def update

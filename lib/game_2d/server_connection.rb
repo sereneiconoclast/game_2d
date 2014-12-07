@@ -63,7 +63,7 @@ class ServerConnection
     @port.register_player @player_name, self
     player = @game.add_player(@player_name)
     @player_id = player.registry_id
-    puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>, becomes #{@player_id}"
+    puts "#{player} logs in from #{@remote_addr} at <#{@game.tick}>"
 
     # We don't send the registry here.  The Game will do it after
     # all logins have been processed and the update has completed.
