@@ -7,7 +7,7 @@ class Pellet < OwnedEntity
   def should_fall?; true end
   def sleep_now?; false end
 
-  def i_hit(others)
+  def i_hit(others, velocity)
     puts "#{self}: hit #{others.inspect}.  That's all for me."
     others.each {|other| other.harmed_by(self)}
     @space.doom(self)

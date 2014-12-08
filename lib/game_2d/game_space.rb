@@ -125,7 +125,7 @@ class GameSpace
     @game, @storage = original.game, original.storage
 
     # Registry should contain all objects - clone those
-    original.all_registered.each {|ent| self << ent.clone }
+    original.all_registered.each {|ent| add_entity ent.clone }
 
     self
   end
@@ -457,6 +457,16 @@ class GameSpace
     moved
   end
 
+  # Add the entity to the grid, and register it
+  # For use only during copies and registry syncs -- some
+  # checks are skipped, and neighbors aren't woken up
+  def add_entity(entity)
+    entity.space = self
+    register(entity)
+    add_entity_to_grid(entity)
+    entity
+  end
+
   # Add an entity.  Will wake neighboring entities
   def <<(entity)
     entity.registry_id = next_id unless entity.registry_id?
@@ -467,10 +477,8 @@ class GameSpace
     entity.space = self
     conflicts = entity.entities_obstructing(entity.x, entity.y)
     if conflicts.empty?
-      register(entity)
-      add_entity_to_grid(entity)
       entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
-      entity
+      add_entity(entity)
     else
       entity.space = nil
       # TODO: Convey error to user somehow

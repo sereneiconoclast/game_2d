@@ -30,8 +30,8 @@ class Entity
     def bottom_cell_y_at(y); (y + HEIGHT - 1) / HEIGHT; end
 
     # Velocity is constrained to the range -MAX_VELOCITY .. MAX_VELOCITY
-    def constrain_velocity(vel)
-      [[vel, MAX_VELOCITY].min, -MAX_VELOCITY].max
+    def constrain_velocity(vel, max=MAX_VELOCITY)
+      [[vel, max].min, -max].max
     end
   end
   include ClassMethods
@@ -118,9 +118,9 @@ class Entity
   end
 
   # Apply acceleration
-  def accelerate(x_accel, y_accel)
-    self.x_vel = @x_vel + x_accel
-    self.y_vel = @y_vel + y_accel
+  def accelerate(x_accel, y_accel, max=MAX_VELOCITY)
+    @x_vel = constrain_velocity(@x_vel + x_accel, max) if x_accel
+    @y_vel = constrain_velocity(@y_vel + y_accel, max) if y_accel
   end
 
   def opaque(others)
@@ -170,8 +170,8 @@ class Entity
       impacts.delete_if {|e| e.x < impact_at_x }
       impact_at_x + WIDTH
     end
+    i_hit(impacts, @x_vel.abs)
     self.x_vel = 0
-    i_hit(impacts)
   end
 
   # Process one tick of motion, vertically only
@@ -195,8 +195,8 @@ class Entity
       impacts.delete_if {|e| e.y < impact_at_y }
       impact_at_y + HEIGHT
     end
+    i_hit(impacts, @y_vel.abs)
     self.y_vel = 0
-    i_hit(impacts)
   end
 
   # Process one tick of motion.  Only called when moving? is true
@@ -237,10 +237,10 @@ class Entity
     end
   end
 
-  def i_hit(other)
-    # TODO
-    puts "#{self} hit #{other.inspect}"
-  end
+  # 'others' is an array of impacted entities
+  # 'velocity' is the absolute value of the x_vel or y_vel
+  # that was being applied when the hit occurred
+  def i_hit(others, velocity); end
 
   def harmed_by(other, damage=1); end
 
@@ -264,10 +264,14 @@ class Entity
     opaque(next_to(self.a + 180))
   end
 
-  def empty_underneath?; opaque(next_to(180)).empty?; end
-  def empty_on_left?; opaque(next_to(270)).empty?; end
-  def empty_on_right?; opaque(next_to(90)).empty?; end
-  def empty_above?; opaque(next_to(0)).empty?; end
+  def beneath; opaque(next_to(180)); end
+  def on_left; opaque(next_to(270)); end
+  def on_right; opaque(next_to(90)); end
+  def above; opaque(next_to(0)); end
+  def empty_underneath?; beneath.empty?; end
+  def empty_on_left?; on_left.empty?; end
+  def empty_on_right?; on_right.empty?; end
+  def empty_above?; above.empty?; end
 
   def angle_to_vector(angle, amplitude=1)
     case angle % 360

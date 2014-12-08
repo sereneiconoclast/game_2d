@@ -5,6 +5,7 @@ require 'game_2d/entity/destination'
 require 'game_2d/entity/ghost'
 require 'game_2d/entity/hole'
 require 'game_2d/entity/owned_entity'
+require 'game_2d/entity/slime'
 require 'game_2d/entity/teleporter'
 require 'game_2d/entity/titanium'
 require 'game_2d/wall'
@@ -38,9 +39,11 @@ module Transparency
     return player?(two) if base?(one)
     return player?(one) if base?(two)
 
-    # Should only get here if both objects are non-ghost players
+    # Default case: opaque
+    # Should only get here if both objects are non-ghost players,
+    # or slime
     fail("Huh?  one=#{one}, two=#{two}") unless
-      one.is_a?(Player) && two.is_a?(Player)
+      normal?(one) && normal?(two)
     false
   end
 
@@ -79,11 +82,15 @@ module Transparency
     entity.is_a? Entity::Base
   end
 
-  def player?(entity)
-    entity.is_a? Player
-  end
-
   def ghost?(entity)
     entity.is_a? Entity::Ghost
+  end
+
+  def player?(entity)
+    entity.is_a?(Player)
+  end
+
+  def normal?(entity)
+    player?(entity) || entity.is_a?(Entity::Slime)
   end
 end

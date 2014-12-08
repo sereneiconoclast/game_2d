@@ -61,7 +61,6 @@ class ClientEngine
 
     last_space = space_at(tick - 1)
     @spaces[tick] = new_space = GameSpace.new(@game_window).copy_from(last_space)
-
     apply_deltas(tick)
     new_space.update
 
@@ -169,7 +168,7 @@ class ClientEngine
   end
 
   def add_entity(space, json)
-    space << (o = Serializable.from_json(json))
+    space.add_entity (o = Serializable.from_json(json))
     if o.is_a?(Player) && @game_window.player_name == o.player_name
       # This can be news, if the server is ahead of us.  The server
       # promises that we always have exactly one entity assigned to

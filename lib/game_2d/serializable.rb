@@ -40,7 +40,8 @@ module Serializable
   def self.from_json(json)
     return nil unless json
     class_name = json[:class]
-    raise "Suspicious class name: #{class_name}" unless
+    fail "No class name in #{json.inspect}" unless class_name
+    fail "Suspicious class name in #{json.inspect}: #{class_name}" unless
       (class_name.start_with? 'Entity::') ||
       (class_name.start_with? 'Move::')
     require "game_2d/#{class_name.pathize}"

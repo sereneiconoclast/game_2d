@@ -343,4 +343,38 @@ describe GameSpace do
       expect(subject[:B]).to be_nil
     end
   end
+
+  describe "#copy_from" do
+    it "copies from the original" do
+      thing1a = Entity::Block.new(200, 800)
+      thing1a.registry_id = :A
+      thing1a.hp = 8
+      subject << thing1a
+      thing2a = Entity::Block.new(600, 800)
+      thing2a.registry_id = :B
+      thing2a.hp = 22
+      subject << thing2a
+
+      expect(thing1a.moving).to be true
+      expect(thing2a.moving).to be true
+
+      subject.update
+      expect(thing1a.moving).to be false
+      expect(thing2a.moving).to be false
+
+      copy = GameSpace.new(nil)
+      copy.copy_from(subject)
+
+      # This precludes using << during copy_from, as that
+      # causes neighbors of the new entity to be woken up
+      thing1b = copy.entities_at_point(200, 800).first
+      thing2b = copy.entities_at_point(600, 800).first
+      expect(thing1b.moving).to be false
+      expect(thing2b.moving).to be false
+
+      expect(thing1b).to eq(thing1a)
+      expect(thing2b).to eq(thing2a)
+      expect(copy).to eq(subject)
+    end
+  end
 end

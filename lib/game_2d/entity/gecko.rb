@@ -64,7 +64,6 @@ class Gecko < Entity
   end
 
   def harmed_by(other, damage=1)
-    puts "#{self}: Ouch!"
     self.hp -= damage
     die if hp <= 0
   end

@@ -7,14 +7,17 @@ require 'gosu'
 
 require 'game_2d/client_connection'
 require 'game_2d/client_engine'
-require 'game_2d/game_space'
 require 'game_2d/entity'
 require 'game_2d/entity_constants'
+require 'game_2d/entity/base'
 require 'game_2d/entity/block'
-require 'game_2d/entity/titanium'
-require 'game_2d/entity/teleporter'
 require 'game_2d/entity/destination'
 require 'game_2d/entity/gecko'
+require 'game_2d/entity/hole'
+require 'game_2d/entity/slime'
+require 'game_2d/entity/teleporter'
+require 'game_2d/entity/titanium'
+require 'game_2d/game_space'
 require 'game_2d/menu'
 require 'game_2d/message'
 require 'game_2d/password_dialog'
@@ -144,6 +147,7 @@ module GameClient
       ['Teleporter',  make_teleporter_npc_proc],
       ['Hole',        make_hole_npc_proc      ],
       ['Base',        make_base_npc_proc      ],
+      ['Slime',       make_slime_npc_proc     ],
     ].collect do |type_name, p|
       MenuItem.new(type_name, self, @font) { @create_npc_proc = p }
     end
@@ -246,7 +250,10 @@ module GameClient
       when Gosu::Kb7 then @create_npc_proc = make_teleporter_npc_proc.call
       when Gosu::Kb8 then @create_npc_proc = make_hole_npc_proc.call
       when Gosu::Kb9 then @create_npc_proc = make_base_npc_proc.call
+      when Gosu::Kb0 then @create_npc_proc = make_slime_npc_proc.call
       when Gosu::KbDelete then send_delete_entity
+      when Gosu::KbBracketLeft then rotate_left
+      when Gosu::KbBracketRight then rotate_right
       else @pressed_buttons << id unless @dialog
     end
   end
@@ -302,31 +309,39 @@ module GameClient
     end
   end
 
-  def make_hole_npc_proc
-    proc do
-      send_create_npc 'Entity::Hole'
-    end
-  end
+  def make_simple_npc_proc(type); proc { send_create_npc "Entity::#{type}" }; end
 
-  def make_base_npc_proc
+  def make_hole_npc_proc; make_simple_npc_proc 'Hole'; end
+  def make_base_npc_proc; make_simple_npc_proc 'Base'; end
+  def make_slime_npc_proc
     proc do
-      send_create_npc 'Entity::Base'
+      send_create_npc 'Entity::Slime', :angle => 270
     end
   end
 
   def send_create_npc(type, args={})
-    args.merge!(
+    @conn.send_create_npc({
       :class => type,
       :position => mouse_entity_location,
       :velocity => [0, 0],
       :angle => 0,
       :moving => true
-    )
-    @conn.send_create_npc(args)
+    }.merge(args))
   end
 
   def grab_specific(registry_id)
     @grabbed_entity_id = registry_id
+  end
+
+  # Actions that modify or delete an existing entity will affect:
+  # * The grabbed entity, if there is one, or
+  # * The entity under the mouse whose center is closest to the mouse
+  def selected_object
+    if @grabbed_entity_id
+      grabbed = space[@grabbed_entity_id]
+      return grabbed if grabbed
+    end
+    space.near_to(*mouse_coords)
   end
 
   def toggle_grab
@@ -338,9 +353,21 @@ module GameClient
     @grabbed_entity_id = space.near_to(*mouse_coords).nullsafe_registry_id
   end
 
+  def adjust_angle(adjustment)
+    return unless target = selected_object
+    @conn.send_update_entity(
+      :registry_id => target.registry_id,
+      :angle => target.a + adjustment,
+      :moving => true # wake it up
+    )
+  end
+
+  def rotate_left; adjust_angle(-90); end
+  def rotate_right; adjust_angle(+90); end
+
   def send_delete_entity
-    return unless entity = space.near_to(*mouse_coords)
-    @conn.send_delete_entity entity
+    return unless target = selected_object
+    @conn.send_delete_entity target
   end
 
   def shutdown

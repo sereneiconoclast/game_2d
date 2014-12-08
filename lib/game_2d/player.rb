@@ -49,8 +49,8 @@ module Player
   def die
     ghost = Entity::Ghost.new(player_name)
     ghost.x, ghost.y, ghost.a, ghost.x_vel, ghost.y_vel, ghost.score =
-      x, y, a, x_vel, y_vel, score
-    return unless space << ghost
+      x, y, 0, x_vel, y_vel, score
+    return unless space << ghost # coast to coast
 
     replace_player_entity ghost
   end
