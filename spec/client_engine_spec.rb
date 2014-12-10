@@ -209,7 +209,7 @@ describe FakeGame do
     game.space.players.first
   end
 
-  it "is in sync after a fall and a build" do
+  it "is in sync after a fall, slide left, and build" do
     window
 
     expect(game.tick).to eq(-1)
@@ -218,61 +218,78 @@ describe FakeGame do
     # server sends its public key
     # client sends encrypted password hash
     update_both
+    expected_tick = 0
+    expect(game.tick).to eq(expected_tick)
     expect(window.space).to be_nil
+    expect(game.space.players.size).to eq(0)
+    expect(game.space.npcs.size).to eq(1) # the starter Base
 
     # server sends response to login in time for tick 1
-    27.times do |n|
+    # The base is still falling, and the player falls with it
+    loop do
       update_both
-      expect(game.tick).to eq(n+1)
-      expect(window.engine.tick).to eq(n+1)
+      expected_tick += 1
+      expect(game.tick).to eq(expected_tick)
+      expect(window.engine.tick).to eq(expected_tick)
+      expect_spaces_to_match
+      expect(game.space.players.size).to eq(1)
+      expect(game.space.npcs.size).to eq(1)
+      break if player_on_server.y == 800
+      expect(player_on_server.should_fall?).to be true
+    end
+    expect(player_on_server.should_fall?).to be false
+
+    # We can't build where the base is
+    # So slide into the space on the left
+    window.press_button! Gosu::KbLeft
+    27.times do
+      update_both
       expect_spaces_to_match
     end
+    window.release_button! Gosu::KbLeft
+    loop do
+      update_both
+      expect_spaces_to_match
+      break if player_on_server.x == 0
+    end
 
-    # Command generated at tick 28, scheduled for tick 34
     window.press_button! Gosu::KbDown
 
     update_both
     expect_spaces_to_match
-    expect(game.space.players.size).to eq(1)
-    expect(game.space.npcs.size).to eq(0)
+    # Does not take effect immediately, but only after 6 ticks
+    expect(game.space.npcs.size).to eq(1) # the starter Base
+    window.release_button! Gosu::KbLeft
 
-    plr = player_on_server
-    expect(plr.y).to eq(800)
-    expect(plr.falling?).to be false
-
-    5.times do # ticks 29 - 33
+    5.times do # waiting for the 6-tick delay to transpire
       update_both
       expect_spaces_to_match
-      expect(game.space.npcs.size).to eq(0)
+      expect(game.space.npcs.size).to eq(1)
     end
 
-    # tick 34
-    window.release_button! Gosu::KbDown
     update_both
-    expect(game.tick).to eq(34)
-    expect(game.space.npcs.size).to eq(1)
+    expect(game.space.npcs.size).to eq(2)
 
     expect_spaces_to_match
 
-    # Command generated at tick 35, scheduled for tick 41
     window.press_button! Gosu::KbUp
-    6.times do # ticks 35 - 40
+    6.times do # waiting for this command to go through
       update_both
       expect_spaces_to_match
-      expect(plr.y).to eq(800)
+      expect(player_on_server.y).to eq(800)
     end
     window.release_button! Gosu::KbUp
-    41.times do |n| # ticks 41 - 81
+    41.times do |n|
       update_both
-      expect(plr.y).to eq(800 - (10 * n))
+      expect(player_on_server.y).to eq(800 - (10 * n))
       cplr = window.engine.space.players.first
-      binding.pry unless cplr == plr
-      expect(cplr).to eq(plr)
+      binding.pry unless cplr == player_on_server
+      expect(cplr).to eq(player_on_server)
       expect_spaces_to_match
     end
   end
 
-  it "stays in sync during a block-move" do
+  it "stays in sync during a base-move" do
     window
     update_both
     loop do
@@ -280,23 +297,18 @@ describe FakeGame do
       break if player_on_server.y == 800
     end
 
-    window.press_button! Gosu::KbDown
-    update_both
-    window.release_button! Gosu::KbDown
     window.press_button! Gosu::KbLeft
-
-    30.times do
-      update_both
-    end
+    27.times { update_both }
     window.release_button! Gosu::KbLeft
+
     loop do
       update_both
       break if player_on_server.x == 0
     end
     expect_spaces_to_match
 
-    blk = window.engine.space.npcs.first
-    expect([blk.x, blk.y]).to eq([400,800])
+    base = window.engine.space.npcs.first
+    expect([base.x, base.y]).to eq([400,800])
 
     window.mouse_x, window.mouse_y = 50, 90
     expect(window.mouse_entity_location).to eq([300, 700])
@@ -311,9 +323,9 @@ describe FakeGame do
       update_both
       expect_spaces_to_match
 
-      blk = window.engine.space.npcs.first
-      $stderr.puts "step ##{n}: blk is at #{blk.x},#{blk.y} moving #{blk.x_vel},#{blk.y_vel}"
-      if blk.x == 400 && blk.y == 700
+      base = window.engine.space.npcs.first
+      $stderr.puts "step ##{n}: base is at #{base.x},#{base.y} moving #{base.x_vel},#{base.y_vel}"
+      if base.x == 300 && base.y == 700
         in_a_row += 1
       else
         in_a_row = 0

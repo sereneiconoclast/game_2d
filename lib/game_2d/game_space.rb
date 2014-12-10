@@ -35,11 +35,12 @@ require 'game_2d/entity/owned_entity'
 class Cell < DelegateClass(Array)
   attr_reader :x, :y
 
+  SORT_BY_REGISTRY = ->(a,b) { a.registry_id <=> b.registry_id }
   def ==(other)
     other.class.equal?(self.class) &&
       other.x == self.x &&
       other.y == self.y &&
-      other.instance_variable_get(:@a) == @a
+      other.instance_variable_get(:@a).sort(&SORT_BY_REGISTRY) == @a.sort(&SORT_BY_REGISTRY)
   end
 
   def initialize(cell_x, cell_y)
