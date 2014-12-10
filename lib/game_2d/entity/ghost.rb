@@ -35,6 +35,8 @@ class Ghost < Entity
 
   def should_fall?; false; end
 
+  def teleportable?; false; end
+
   def update
     fail "No space set for #{self}" unless @space
 

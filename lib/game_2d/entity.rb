@@ -237,6 +237,11 @@ class Entity
     end
   end
 
+  # Most entities can be teleported, but not when grabbed
+  def teleportable?
+    !grabbed?
+  end
+
   # 'others' is an array of impacted entities
   # 'velocity' is the absolute value of the x_vel or y_vel
   # that was being applied when the hit occurred

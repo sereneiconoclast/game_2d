@@ -6,6 +6,8 @@ class Destination < OwnedEntity
 
   def should_fall?; false; end
 
+  def teleportable?; false; end
+
   def update; end
 
   def image_filename; "destination.png"; end

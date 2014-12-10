@@ -544,14 +544,21 @@ class GameSpace
   end
 
   def update
+    grabbed_entities = []
     @registry.values.each do |ent|
       if ent.grabbed?
-        ent.move
-        ent.release!
-        ent.x_vel = ent.y_vel = 0
+        grabbed_entities << ent
       elsif ent.moving?
         ent.update
       end
+    end
+    # Update these, and clear their flag, last
+    # Gives other entities (e.g. teleporters) a chance to
+    # consider their grabbed-state
+    grabbed_entities.each do |ent|
+      ent.move
+      ent.release!
+      ent.x_vel = ent.y_vel = 0
     end
     purge_doomed_entities
   end

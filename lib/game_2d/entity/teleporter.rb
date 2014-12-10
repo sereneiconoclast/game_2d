@@ -6,9 +6,11 @@ class Entity
 class Teleporter < Entity
   def should_fall?; false; end
 
+  def teleportable?; false; end
+
   def update
     space.entities_overlapping(x, y).each do |overlap|
-      next if overlap == self
+      next unless overlap.teleportable?
       next if (overlap.x - x).abs > WIDTH/2
       next if (overlap.y - y).abs > HEIGHT/2
       dest = space.possessions(self)
