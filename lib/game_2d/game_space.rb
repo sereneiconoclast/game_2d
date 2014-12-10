@@ -337,7 +337,18 @@ class GameSpace
     ]
   end
 
-  # Return a list of the entities (if any) at a subpixel point (X, Y)
+  # Return a list of the entities (if any) exactly at
+  # the subpixel point (X, Y).  That is, the point is
+  # the entity's upper-left corner
+  def entities_exactly_at_point(x, y)
+    at(*cell_location_at_point(x, y)).find_all do |e|
+      e.x == x && e.y == y
+    end
+  end
+
+  # Return a list of the entities (if any) intersecting with
+  # the subpixel point (X, Y).  That is, the point falls
+  # somewhere within the entity
   def entities_at_point(x, y)
     at(*cell_location_at_point(x, y)).find_all do |e|
       e.x <= x && e.x > (x - WIDTH) &&

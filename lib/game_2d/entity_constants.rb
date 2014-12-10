@@ -9,6 +9,6 @@ module EntityConstants
   # The dimensions of a cell, equals the dimensions of an entity
   WIDTH = HEIGHT = CELL_WIDTH_IN_PIXELS * PIXEL_WIDTH
 
-  # Maximum velocity is a full cell per tick, which is a lot
-  MAX_VELOCITY = WIDTH
+  # Maximum velocity is just shy of a full cell per tick, which is a lot
+  MAX_VELOCITY = WIDTH - 1
 end
