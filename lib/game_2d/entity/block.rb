@@ -67,38 +67,36 @@ class Block < OwnedEntity
     move
   end
 
+  # Need a source of support at the exact same
+  # height on both sides
   def look_ahead_for_support_both_sides
-    left_support, right_support = possible_sources_of_support
-
-    # Find the highest (if dropping) or lowest (if rising) height on
-    # the left that matches with something on the right
-    left_heights = left_support.sort
-    find_match_on_right = proc do |left_y|
-      return left_y if right_support.include?(left_y)
+    look_ahead_for_support do |left, right|
+      left & right
     end
-
-    if y_vel > 0 # dropping
-      left_heights.each(&find_match_on_right)
-    else # rising
-      left_heights.reverse_each(&find_match_on_right)
-    end
-
-    nil
   end
 
+  # Any source of support will do, either side
+  # or both
   def look_ahead_for_support_either_side
-    left_support, right_support = possible_sources_of_support
+    look_ahead_for_support do |left, right|
+      left + right
+    end
+  end
 
-    # Find the highest (if dropping) or lowest (if rising) height on
-    # either side
-    all_heights = left_support + right_support
-    (y_vel > 0) ? all_heights.min : all_heights.max
+  # Find the highest (if dropping) or lowest (if rising) height that meets
+  # the requirements for support
+  def look_ahead_for_support
+    support_heights = yield *possible_sources_of_support
+
+    (y_vel > 0) ? support_heights.min : support_heights.max
   end
 
   # Sources of support must intersect with the points next
   # to us, and be:
   # - Level with our lower edge, if dropping
   # - A point above our upper edge, if rising
+  # - Close enough that our current velocity will
+  # take us past that point during this tick
   #
   # This just returns the heights at which we might find support
   def possible_sources_of_support
