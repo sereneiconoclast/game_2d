@@ -60,12 +60,26 @@ class Slime < Entity
       else
         self.y_vel = 0
         accelerate((a == 270) ? -1 : 1, nil, MAX_SPEED)
-        self.a += 180 unless move
+        advance
       end
     else
       @sleep_count -= 1
     end
   end
+
+  def advance
+    blocks_underfoot = beneath
+    if blocks_underfoot.size == 1
+      # Slide around if we're at the corner; otherwise, move normally
+      # Don't allow slide_around() to adjust our angle
+      slide_around(blocks_underfoot.first, false) or move or turn_around
+    else
+      # Straddling two objects, or falling
+      move or turn_around
+    end
+  end
+
+  def turn_around; self.a += 180; end
 
   def i_hit(others, velocity)
     slime_them(others, velocity)

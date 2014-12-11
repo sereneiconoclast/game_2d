@@ -369,6 +369,45 @@ class Entity
     end
   end
 
+  # Apply a move where this entity slides past another
+  # If it reaches the other entity's corner, it will turn at
+  # right angles to go around that corner
+  #
+  # apply_turn: true if this entity's angle should be adjusted
+  # during the turn
+  #
+  # Returns true if a corner was reached and we went around it,
+  # false if that didn't happen (in which case, no move occurred)
+  def slide_around(other, apply_turn = true)
+    # Figure out where corner is and whether we're about to reach or pass it
+    corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
+    return false unless corner
+
+    original_speed = @x_vel.abs + @y_vel.abs
+    original_dir = vector_to_angle
+    new_dir = original_dir + turn
+
+    # Make sure nothing occupies any space we're about to move through
+    return false unless opaque(
+      @space.entities_overlapping(*corner) + next_to(new_dir, *corner)
+    ).empty?
+
+    # Move to the corner
+    self.x_vel, self.y_vel = angle_to_vector(original_dir, distance)
+    move
+
+    # Turn and apply remaining velocity
+    # Make sure we move at least one subpixel so we don't sit exactly at
+    # the corner, and fall
+    self.a += turn if apply_turn
+    overshoot = 1 if overshoot.zero?
+    self.x_vel, self.y_vel = angle_to_vector(new_dir, overshoot)
+    move
+
+    self.x_vel, self.y_vel = angle_to_vector(new_dir, original_speed)
+    true
+  end
+
   def as_json
     Serializable.as_json(self).merge!(
       :class => self.class.to_s,

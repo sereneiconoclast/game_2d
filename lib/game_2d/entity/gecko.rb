@@ -96,41 +96,8 @@ class Gecko < Entity
     # Only go around corner if sitting on exactly one object
     blocks_underfoot = underfoot
     if blocks_underfoot.size == 1
-      other = blocks_underfoot.first
-      # Figure out where corner is and whether we're about to reach or pass it
-      corner, distance, overshoot, turn = going_past_entity(other.x, other.y)
-      if corner
-        original_speed = @x_vel.abs + @y_vel.abs
-        original_dir = vector_to_angle
-        new_dir = original_dir + turn
-
-        # Make sure nothing occupies any space we're about to move through
-        if opaque(
-          @space.entities_overlapping(*corner) + next_to(new_dir, *corner)
-        ).empty?
-          # Move to the corner
-          self.x_vel, self.y_vel = angle_to_vector(original_dir, distance)
-          move
-
-          # Turn and apply remaining velocity
-          # Make sure we move at least one subpixel so we don't sit exactly at
-          # the corner, and fall
-          self.a += turn
-          overshoot = 1 if overshoot.zero?
-          self.x_vel, self.y_vel = angle_to_vector(new_dir, overshoot)
-          move
-
-          self.x_vel, self.y_vel = angle_to_vector(new_dir, original_speed)
-        else
-          # Something's in the way -- possibly in front of us, or possibly
-          # around the corner
-          move
-        end
-      else
-        # Not yet reaching the corner -- or making a diagonal motion, for which
-        # we can't support going around the corner
-        move
-      end
+      # Slide around if we're at the corner; otherwise, move normally
+      slide_around(blocks_underfoot.first) or move
     else
       # Straddling two objects, or falling
       move
