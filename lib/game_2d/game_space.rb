@@ -289,13 +289,12 @@ class GameSpace
 
   # We can safely look up cell_x == -1, cell_x == @cell_width, cell_y == -1,
   # and/or cell_y == @cell_height -- any of these returns a Wall instance
+  def ok_coords?(cell_x, cell_y)
+    cell_x >= -1 && cell_x <= @cell_width &&
+    cell_y >= -1 && cell_y <= @cell_height
+  end
   def assert_ok_coords(cell_x, cell_y)
-    raise "Illegal coordinate #{cell_x}x#{cell_y}" if (
-      cell_x < -1 ||
-      cell_y < -1 ||
-      cell_x > @cell_width ||
-      cell_y > @cell_height
-    )
+    raise "Illegal coordinate #{cell_x}x#{cell_y}" unless ok_coords?(cell_x, cell_y)
   end
 
   # Retrieve set of entities falling (partly) within cell coordinates,
@@ -375,6 +374,55 @@ class GameSpace
   # Return whichever entity's center is closest (or ties for closest)
   def near_to(x, y)
     nearest_to(entities_at_point(x, y), x, y)
+  end
+
+  # Point (x, y) is on the edge of a circle
+  # Draw a line from (x, y) to (x, center_y)
+  # All the cells intersecting that line will have their coordinates
+  # added to the set
+  def include_cell_in_circle(coord_set, x, y, center_y)
+    cell_x, cell_y = x / WIDTH, y / HEIGHT
+    cell_center_y = center_y / HEIGHT
+    y_range = ([cell_center_y, cell_y].min)..([cell_center_y, cell_y].max)
+    y_range.each {|cy| coord_set << [cell_x, cy] if ok_coords?(cell_x, cy)}
+  end
+  private :include_cell_in_circle
+
+  # Lifted from http://en.wikipedia.org/wiki/Midpoint_circle_algorithm
+  # Tweaked to convert from subpixel coordinates to cells, and add all
+  # the affected cells to a set
+  def cells_intersecting_circle(x0, y0, radius)
+    in_circle = Set.new
+    x = radius
+    y = 0
+    radius_error = 1-x
+
+    while x >= y
+      include_cell_in_circle(in_circle, x + x0, y + y0, y0)
+      include_cell_in_circle(in_circle, y + x0, x + y0, y0)
+      include_cell_in_circle(in_circle, -x + x0, y + y0, y0)
+      include_cell_in_circle(in_circle, -y + x0, x + y0, y0)
+      include_cell_in_circle(in_circle, -x + x0, -y + y0, y0)
+      include_cell_in_circle(in_circle, -y + x0, -x + y0, y0)
+      include_cell_in_circle(in_circle, x + x0, -y + y0, y0)
+      include_cell_in_circle(in_circle, y + x0, -x + y0, y0)
+      y += 1
+      if radius_error < 0
+        radius_error += 2 * y + 1
+      else
+        x -= 1
+        radius_error += 2 * (y - x + 1)
+      end
+    end
+    in_circle.collect {|cell_x, cell_y| at(cell_x, cell_y)}
+  end
+
+  # Return all entities whose centers are within the specified range
+  # of (x, y)
+  def within_range(x, y, range)
+    cells_intersecting_circle(x, y, range).flatten.find_all do |entity|
+      distance_between(x, y, entity.cx, entity.cy) <= range
+    end
   end
 
   # Accepts a collection of (x, y)
@@ -538,17 +586,20 @@ class GameSpace
   # turns out not to exist
   def fire_entity_not_found(entity); end
 
+  # Delete this entity immediately
+  def purge(entity)
+    if registered?(entity)
+      remove_entity_from_grid(entity)
+      entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
+      deregister(entity)
+    else
+      fire_entity_not_found(entity)
+    end
+  end
+
   # Actually remove all previously-marked entities.  Wakes neighbors
   def purge_doomed_entities
-    @doomed.each do |entity|
-      if registered?(entity)
-        remove_entity_from_grid(entity)
-        entities_bordering_entity_at(entity.x, entity.y).each(&:wake!)
-        deregister(entity)
-      else
-        fire_entity_not_found(entity)
-      end
-    end
+    @doomed.each {|entity| purge entity}
     @doomed.clear
   end
 

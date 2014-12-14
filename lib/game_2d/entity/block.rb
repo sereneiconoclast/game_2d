@@ -117,6 +117,7 @@ class Block < OwnedEntity
 
   def harmed_by(other, damage=1)
     self.hp -= damage
+    wake!
     @space.doom(self) if hp <= 0
   end
 

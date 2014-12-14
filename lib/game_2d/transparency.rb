@@ -4,6 +4,7 @@ require 'game_2d/entity/block'
 require 'game_2d/entity/destination'
 require 'game_2d/entity/ghost'
 require 'game_2d/entity/hole'
+require 'game_2d/entity/nuke'
 require 'game_2d/entity/owned_entity'
 require 'game_2d/entity/slime'
 require 'game_2d/entity/teleporter'
@@ -87,7 +88,7 @@ module Transparency
   end
 
   def player?(entity)
-    entity.is_a?(Player)
+    entity.is_a?(Player) || entity.is_a?(Entity::Nuke)
   end
 
   def normal?(entity)

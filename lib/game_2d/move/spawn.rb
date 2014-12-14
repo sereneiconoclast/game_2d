@@ -1,5 +1,4 @@
 require 'game_2d/complex_move'
-require 'game_2d/game_client'
 require 'game_2d/entity_constants'
 require 'game_2d/entity/gecko'
 

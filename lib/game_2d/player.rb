@@ -1,6 +1,7 @@
 require 'gosu'
 require 'game_2d/entity_constants'
-require 'game_2d/zorder'
+
+# Some require's moved to end due to circular dependencies
 
 # The base module representing what all Players have in common
 # Moves can be enqueued by calling add_move
@@ -43,7 +44,7 @@ module Player
     else
       game.replace_player_entity(player_name, new_entity.registry_id)
     end
-    space.doom(self)
+    space.purge(self) # Make room for the nuke
   end
 
   def die
@@ -53,6 +54,8 @@ module Player
     return unless space << ghost # coast to coast
 
     replace_player_entity ghost
+
+    space << Entity::Nuke.new(x, y, 0, x_vel, y_vel)
   end
 
   def draw_zorder; ZOrder::Player end
@@ -69,3 +72,8 @@ module Player
     "#{player_name} (#{self.class.name} #{registry_id_safe}) at #{x}x#{y}"
   end
 end
+
+require 'game_2d/entity/ghost'
+require 'game_2d/entity/nuke'
+require 'game_2d/game_client'
+require 'game_2d/zorder'
