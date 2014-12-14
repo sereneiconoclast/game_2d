@@ -2,6 +2,7 @@ require 'facets/kernel/try'
 require 'game_2d/entity'
 require 'game_2d/entity/pellet'
 require 'game_2d/entity/block'
+require 'game_2d/move/line_up'
 require 'game_2d/move/rise_up'
 require 'game_2d/player'
 
@@ -85,7 +86,7 @@ class Gecko < Entity
 
     args = next_move
     case (current_move = args.delete(:move).to_sym)
-      when :slide_left, :slide_right, :brake, :flip, :build, :rise_up
+      when :slide_left, :slide_right, :brake, :flip, :build, :rise_up, :line_up
         send current_move unless falling
       when :fire
         fire args[:x_vel], args[:y_vel]
@@ -163,6 +164,10 @@ class Gecko < Entity
     self.complex_move = Move::RiseUp.new(self)
   end
 
+  def line_up
+    self.complex_move = Move::LineUp.new(self)
+  end
+
   # Called by GameWindow
   # Should return the move to be sent via ClientConnection
   # (or nil)
@@ -193,6 +198,8 @@ class Gecko < Entity
     case keypress
       when Gosu::KbUp, Gosu::KbW
         return building? ? :rise_up : :flip
+      when Gosu::KbF, Gosu::KbNumpad0
+        return :line_up
     end
   end
 
