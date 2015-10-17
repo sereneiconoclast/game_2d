@@ -4,6 +4,8 @@ require 'game_2d/entity/ghost'
 
 class Entity
 
+# Not to be confused with a "base class".  This is a player base,
+# a spawn point.
 class Base < Entity
   def should_fall?; underfoot.empty?; end
 

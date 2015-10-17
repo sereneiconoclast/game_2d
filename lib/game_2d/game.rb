@@ -180,11 +180,11 @@ class Game
   def add_player_action(action)
     at_tick, player_name = action[:at_tick], action[:player_name]
     unless at_tick
-      warn "Received update from #{player_name} without at_tick!"
       at_tick = @tick + 1
+      warn "Received update from #{player_name} without at_tick! - executing at #{at_tick}"
     end
     if at_tick <= @tick
-      warn "Received update from #{player_name} #{@tick + 1 - at_tick} ticks late"
+      warn "Received update from #{player_name} #{@tick + 1 - at_tick} ticks late - executing at #{@tick + 1}"
       at_tick = @tick + 1
     end
     @player_actions[at_tick] << action

@@ -28,6 +28,7 @@ describe Entity::Block do
       add_titanium 800, 400 # on right
       add_titanium 0, 800   # lower-left
       add_titanium 800, 800   # lower-right
+      expect_new_height 400
       world.update; expect_new_height 401
     end
     it "doesn't fall when something directly underneath" do
