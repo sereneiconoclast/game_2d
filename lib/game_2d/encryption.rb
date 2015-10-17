@@ -7,7 +7,7 @@ module Encryption
   end
 
   def make_cipher
-    OpenSSL::Cipher::AES.new(128, :CBC)
+    OpenSSL::Cipher::AES.new(256, :CBC)
   end
 
   # Returns [encrypted, iv]

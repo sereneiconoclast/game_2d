@@ -165,7 +165,7 @@ describe FakeGame do
     :profile                  => profile,
     :registry_broadcast_every => registry_broadcast_every
   ) }
-  let(:key_size) { 128 }
+  let(:key_size) { 256 }
   let(:window) {
     game
     w = FakeGameWindow.new(:hostname => hostname, :port => port_number, :name => player_name, :key_size => key_size)

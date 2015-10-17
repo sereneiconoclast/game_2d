@@ -32,6 +32,7 @@ class ServerConnection
     client_public_key = handshake[:client_public_key]
     dh = OpenSSL::PKey::DH.new(dh_public_key)
     dh.generate_key!
+    # Field declared in Encryption
     self.key = dh.compute_key(OpenSSL::BN.new client_public_key)
     response = {
       :server_public_key => dh.pub_key.to_s
