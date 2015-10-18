@@ -607,7 +607,7 @@ class GameSpace
     grabbed_entities = []
     # The order in which we update entities must be well-known
     # Otherwise, discrepancies between client and server can arise
-    @registry.values.sort {|a,b| a.registry_id <=> b.registry_id}.each do |ent|
+    @registry.values.sort(&Cell::SORT_BY_REGISTRY).each do |ent|
       if ent.grabbed?
         grabbed_entities << ent
       elsif ent.moving?

@@ -28,6 +28,7 @@ require 'game_2d/zorder'
 module GameClient
   # Gosu methods we call:
   # caption=(text)
+  # height
   # width
   # mouse_x
   # mouse_y
@@ -78,7 +79,12 @@ module GameClient
     @conn = _make_client_connection(hostname, port, self, @player_name, key_size)
     @engine = @conn.engine = ClientEngine.new(self)
     @menu = build_top_menu
-    @dialog = PasswordDialog.new(self, @font)
+    @dialog = PasswordDialog.new(self, @font,
+      proc do |password_hash|
+        @conn.start password_hash
+        @dialog = nil
+      end
+    )
   end
 
   def _make_client_connection(*args)
@@ -216,15 +222,23 @@ module GameClient
   end
 
   def button_down(id)
+    # Dialogs and message boxes can have TextInputs which,
+    # when assigned to the Gosu window, capture their own
+    # keypresses to update their text fields
+    # However, there are some keys they can't capture
+    if @dialog
+      @dialog.button_down id
+      return
+    end
+
+    if @message
+      @message.button_down id
+      return
+    end
+
     case id
-      when Gosu::KbEnter, Gosu::KbReturn then
-        if @dialog
-          @dialog.enter
-          @conn.start(@dialog.password_hash)
-          @dialog = nil
-        end
       when Gosu::KbP then
-        @conn.send_ping unless @dialog
+        @conn.send_ping
       when Gosu::KbEscape then @menu = @top_menu
       when Gosu::MsLeft then # left-click
         if new_menu = @menu.handle_click
@@ -254,7 +268,7 @@ module GameClient
       when Gosu::KbDelete then send_delete_entity
       when Gosu::KbBracketLeft then rotate_left
       when Gosu::KbBracketRight then rotate_right
-      else @pressed_buttons << id unless @dialog
+      else @pressed_buttons << id
     end
   end
 
