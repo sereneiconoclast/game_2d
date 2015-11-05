@@ -35,6 +35,7 @@ EOF
   spec.require_paths = ['lib']
   spec.required_ruby_version = '>= 1.9.3'
 
+  spec.add_runtime_dependency 'clipboard', ['>= 1.0.6']
   spec.add_runtime_dependency 'facets', ['>= 2.9.3']
   spec.add_runtime_dependency 'gosu', ['>= 0.8.5']
   spec.add_runtime_dependency 'json', ['>= 1.8.1']

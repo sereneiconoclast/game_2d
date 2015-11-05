@@ -1,4 +1,5 @@
 require 'gosu'
+require 'clipboard'
 require 'game_2d/message'
 
 class TextDialog < Message
@@ -47,14 +48,13 @@ class TextDialog < Message
   # indicating which characters of the line are selected
   # Otherwise, returns nil
   def selected_part_of_line(line_number)
+    # No selection
+    return nil unless selection?
+
     start_line, start_pos, end_line, end_pos = sort_locations
 
-    # No selection
-    if start_line == end_line && start_pos == end_pos
-      return nil
-
     # This line is entirely outside selection
-    elsif start_line > line_number || end_line < line_number
+    if start_line > line_number || end_line < line_number
       return nil
     end
 
@@ -99,10 +99,24 @@ class TextDialog < Message
     when Gosu::KbBackspace then backspace
     when Gosu::KbDelete then delete
     when Gosu::KbReturn, Gosu::KbEnter then enter
-    else insert_char(id, shift)
+    else
+      if ctrl
+        case id
+        when Gosu::KbC then copy
+        when Gosu::KbX then cut
+        when Gosu::KbV then paste
+        end
+        return
+      else
+        insert_char(id, shift) || return
+      end
     end
 
     void_selection if should_void_selection || !shift
+  end
+
+  def selection?
+    @line_number != @select_line || @cursor_pos != @select_pos
   end
 
   def void_selection
@@ -194,7 +208,10 @@ class TextDialog < Message
   end
 
   def backspace
-    if @cursor_pos > 0
+    if selection?
+      delete_selection
+      false
+    elsif @cursor_pos > 0
       @lines[@line_number] =
         this_line[0...@cursor_pos - 1] +
         this_line[@cursor_pos..-1]
@@ -208,7 +225,10 @@ class TextDialog < Message
   end
 
   def delete
-    if @cursor_pos < this_line.size
+    if selection?
+      delete_selection
+      false
+    elsif @cursor_pos < this_line.size
       @lines[@line_number] =
         this_line[0...@cursor_pos] +
         this_line[(@cursor_pos+1)..-1]
@@ -219,7 +239,85 @@ class TextDialog < Message
     end
   end
 
+  def selected_text
+    return '' unless selection?
+
+    start_line, start_pos, end_line, end_pos = sort_locations
+    if start_line == end_line
+      @lines[start_line][start_pos...end_pos]
+    else
+      (
+        [@lines[start_line][start_pos..-1]] +
+        @lines[start_line+1...end_line] +
+        [@lines[end_line][0...end_pos]]
+      ) * "\n"
+    end
+  end
+
+  def before_selected_text
+    start_line, start_pos, end_line, end_pos = sort_locations
+    @lines[0...start_line] + [@lines[start_line][0...start_pos]]
+  end
+
+  def after_selected_text
+    start_line, start_pos, end_line, end_pos = sort_locations
+    [@lines[end_line][end_pos..-1]] + @lines[end_line+1..-1]
+  end
+
+  # lines is an array with at least one string
+  # The first element will be joined with the text before selection
+  # The last will be joined with the following text
+  # With one element, it's a partial line joined on both sides
+  def replace_selected_text_with(lines)
+    before, after = before_selected_text, after_selected_text
+    before_fragment, after_fragment = before.pop, after.shift
+
+    case lines.size
+    when 0
+      fail "Unexpected: empty array"
+    when 1
+      fragment = lines.first
+      @line_number = before.size
+      @cursor_pos = before_fragment.size + fragment.size
+      @lines =
+        before +
+        [before_fragment + fragment + after_fragment] +
+        after
+    else
+      @line_number = before.size + lines.size - 1
+      @cursor_pos = lines.last.size
+      before_fragment += lines.shift
+      after_fragment = lines.pop + after_fragment
+      @lines =
+        before + [before_fragment] +
+        lines +
+        [after_fragment] + after
+    end
+    void_selection
+  end
+
+  def delete_selection
+    return unless selection?
+    replace_selected_text_with([''])
+  end
+
+  def copy
+    return unless selection?
+    Clipboard.copy(selected_text)
+  end
+
+  def cut
+    copy
+    delete_selection
+  end
+
+  def paste
+    return if (new_text = Clipboard.paste).empty?
+    replace_selected_text_with(new_text.split("\n", -1))
+  end
+
   def enter
+    delete_selection
     after = this_line[@cursor_pos..-1]
     @lines[@line_number] = this_line[0...@cursor_pos]
     @line_number += 1
@@ -230,6 +328,7 @@ class TextDialog < Message
 
   def insert_char(id, shift)
     if ch = CHAR_TABLE[id]
+      delete_selection
       ch = ch[shift ? -1 : 0]
       @lines[@line_number] =
         this_line[0...@cursor_pos] + ch +
