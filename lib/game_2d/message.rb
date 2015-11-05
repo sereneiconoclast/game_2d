@@ -5,7 +5,9 @@ class Message
   def initialize(window, font, lines)
     @window, @font, @lines = window, font, lines
 
-    @fg_color, @bg_color = Gosu::Color::YELLOW, Gosu::Color::BLACK
+    @fg_color, @bg_color =
+      Gosu::Color::YELLOW, Gosu::Color::BLACK
+
     @justify = :center
     @drawn = false
     @draw_count = 0
@@ -25,7 +27,8 @@ class Message
     lines_height = line_height * count
     lines_top = (@window.height - (count * line_height)) / 2
     x_center = @window.width / 2
-    max_width = @lines.collect {|line| @font.text_width(line)}.max
+    line_widths = @lines.collect {|line| @font.text_width(line)}
+    max_width = line_widths.max
     lines_bottom = lines_top + (line_height * count)
     left = x_center - (max_width / 2)
     right = x_center + (max_width / 2)
@@ -41,14 +44,23 @@ class Message
       else fail "Unknown justification #{@justify}"
       end
     @lines.each_with_index do |line, n|
+      x_margin = max_width - line_widths[n]
+      x_min, x_max =
+        case @justify
+        when :left then [left, right - x_margin]
+        when :right then [left + x_margin, right]
+        when :center then [left + x_margin/2, right - x_margin/2]
+        else fail "Unknown justification #{@justify}"
+        end
       line_top = lines_top + n * line_height
       line_bottom = line_top + line_height - 1
-      draw_line line, n, x_pos, rel_x, line_top, line_bottom
+      draw_line line, n, x_pos, rel_x, x_min, x_max,
+        line_top, line_bottom
     end
     @drawn = true
   end
 
-  def draw_line(line, line_number, x_pos, rel_x,
+  def draw_line(line, line_number, x_pos, rel_x, x_min, x_max,
                 line_top, line_bottom)
     @font.draw_rel(line, x_pos, line_top, ZOrder::Text,
         rel_x, 0.0, 1.0, 1.0, @fg_color)

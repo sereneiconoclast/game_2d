@@ -8,14 +8,30 @@ class TextDialog < Message
     font ||= Gosu::Font.new(window, "Courier", 16)
     initial_lines ||= ['']
     super(window, font, initial_lines)
+    @select_color = Gosu::Color::CYAN
     @justify = :left
     @line_number = 0
     @cursor_pos = 0
+    @select_line = 0
+    @select_pos = 0
   end
 
-  def draw_line(line, line_number, x_pos, rel_x,
+  def draw_line(line, line_number, x_pos, rel_x, x_min, x_max,
                 line_top, line_bottom)
     super
+    this_line = @lines[line_number]
+
+    sel_begin, sel_end = selected_part_of_line(line_number)
+    if sel_begin
+      t_before, t_after =
+        this_line[0...sel_begin], this_line[sel_end..-1]
+      x_sel_begin = x_min + @font.text_width(t_before)
+      x_sel_end = x_max - @font.text_width(t_after)
+      @window.draw_box_at(x_sel_begin, line_top,
+                          x_sel_end, line_bottom,
+                          @select_color)
+    end
+
     return unless draw_count % BLINK_RATE > (BLINK_RATE / 2)
     if line_number == @line_number
       substr = this_line[0...@cursor_pos]
@@ -27,13 +43,49 @@ class TextDialog < Message
     end
   end
 
+  # If the selection intersects this line, returns an array
+  # indicating which characters of the line are selected
+  # Otherwise, returns nil
+  def selected_part_of_line(line_number)
+    start_line, start_pos, end_line, end_pos = sort_locations
+
+    # No selection
+    if start_line == end_line && start_pos == end_pos
+      return nil
+
+    # This line is entirely outside selection
+    elsif start_line > line_number || end_line < line_number
+      return nil
+    end
+
+    sel_begin = start_line < line_number ? 0 : start_pos
+    sel_end = end_line > line_number ? @lines[line_number].size : end_pos
+    return nil if sel_begin == sel_end
+    return [sel_begin, sel_end]
+  end
+
+  def sort_locations(
+    line1=@line_number, pos1=@cursor_pos,
+    line2=@select_line, pos2=@select_pos
+  )
+    if line1 < line2
+      [line1, pos1, line2, pos2]
+    elsif line1 > line2
+      [line2, pos2, line1, pos1]
+    elsif pos1 <= pos2
+      [line1, pos1, line2, pos2]
+    else
+      [line2, pos2, line1, pos1]
+    end
+  end
+
   def button_down(id)
     ctrl = @window.button_down?(Gosu::KbLeftControl) ||
            @window.button_down?(Gosu::KbRightControl)
     shift = @window.button_down?(Gosu::KbLeftShift) ||
             @window.button_down?(Gosu::KbRightShift)
 
-    case id
+    should_void_selection = case id
     when Gosu::KbHome
       if ctrl then start_of_buffer else start_of_line end
     when Gosu::KbEnd
@@ -49,10 +101,17 @@ class TextDialog < Message
     when Gosu::KbReturn, Gosu::KbEnter then enter
     else insert_char(id, shift)
     end
+
+    void_selection if should_void_selection || !shift
+  end
+
+  def void_selection
+    @select_line, @select_pos = @line_number, @cursor_pos
   end
 
   def start_of_line
     @cursor_pos = 0
+    false
   end
 
   def start_of_buffer
@@ -62,6 +121,7 @@ class TextDialog < Message
 
   def end_of_line
     @cursor_pos = this_line.size
+    false
   end
 
   def end_of_buffer
@@ -74,6 +134,7 @@ class TextDialog < Message
       @line_number += 1
       @cursor_pos = [this_line.size, @cursor_pos].min
     end
+    false
   end
 
   def prev_line
@@ -81,6 +142,7 @@ class TextDialog < Message
       @line_number -= 1
       @cursor_pos = [this_line.size, @cursor_pos].min
     end
+    false
   end
 
   def next_char
@@ -90,6 +152,7 @@ class TextDialog < Message
       @line_number += 1
       @cursor_pos = 0
     end
+    false
   end
 
   def prev_char
@@ -99,6 +162,7 @@ class TextDialog < Message
       @line_number -= 1
       @cursor_pos = this_line.size
     end
+    false
   end
 
   def next_word
@@ -112,6 +176,7 @@ class TextDialog < Message
     else
       @cursor_pos = this_line.size
     end
+    false
   end
 
   def prev_word
@@ -125,6 +190,7 @@ class TextDialog < Message
     else
       @cursor_pos = 0
     end
+    false
   end
 
   def backspace
@@ -133,9 +199,11 @@ class TextDialog < Message
         this_line[0...@cursor_pos - 1] +
         this_line[@cursor_pos..-1]
       @cursor_pos -= 1
+      true
     elsif @line_number > 0
       prev_char
       @lines[@line_number] += @lines.delete_at(@line_number + 1)
+      true
     end
   end
 
@@ -144,8 +212,10 @@ class TextDialog < Message
       @lines[@line_number] =
         this_line[0...@cursor_pos] +
         this_line[(@cursor_pos+1)..-1]
+      true
     elsif @line_number < @lines.size - 1
       @lines[@line_number] += @lines.delete_at(@line_number + 1)
+      true
     end
   end
 
@@ -155,6 +225,7 @@ class TextDialog < Message
     @line_number += 1
     @lines.insert @line_number, after
     @cursor_pos = 0
+    true
   end
 
   def insert_char(id, shift)
@@ -164,6 +235,7 @@ class TextDialog < Message
         this_line[0...@cursor_pos] + ch +
         this_line[@cursor_pos..-1]
       @cursor_pos += 1
+      true
     end
   end
 
