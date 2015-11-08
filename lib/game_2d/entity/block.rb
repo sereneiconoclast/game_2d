@@ -41,7 +41,7 @@ class Block < OwnedEntity
   end
 
   def supported_on_right
-    right_support = opaque(space.entities_exactly_at_point(x + WIDTH, y)).any?
+    opaque(space.entities_exactly_at_point(x + WIDTH, y)).any?
   end
 
   def update

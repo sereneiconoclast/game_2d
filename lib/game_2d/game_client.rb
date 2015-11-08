@@ -21,6 +21,7 @@ require 'game_2d/game_space'
 require 'game_2d/menu'
 require 'game_2d/message'
 require 'game_2d/password_dialog'
+require 'game_2d/text_dialog'
 require 'game_2d/zorder'
 
 # We put as many methods here as possible, so we can test them
@@ -268,6 +269,7 @@ module GameClient
       when Gosu::KbDelete then send_delete_entity
       when Gosu::KbBracketLeft then rotate_left
       when Gosu::KbBracketRight then rotate_right
+      when Gosu::KbApostrophe then edit_droid_dialog
       else @pressed_buttons << id
     end
   end
@@ -384,6 +386,24 @@ module GameClient
     @conn.send_delete_entity target
   end
 
+  def edit_droid_dialog
+    return unless player && player.droid?
+    @dialog = TextDialog.new(self,
+      proc do |str|
+        if player && player.droid?
+          droid = player.droid
+          @conn.send_move(player_id, :edit_droid,
+            :droid_id => droid.registry_id,
+            :program => str)
+        else
+          warn "Can't send edit, no longer have a droid"
+        end
+        @dialog = nil
+      end,
+      proc { @dialog = nil },
+      nil, player.droid.program)
+  end
+
   def shutdown
     @conn.disconnect
     close
@@ -393,8 +413,10 @@ module GameClient
   def handle_input
     return unless player # can happen when spawning
     return if player.should_fall? || @dialog
-    move = move_for_keypress
-    @conn.send_move player_id, move # also creates a delta in the engine
+    if move = move_for_keypress
+      @conn.send_move player_id, move
+      # also creates a delta in the engine
+    end
   end
 
   # Check keyboard, mouse, and pressed-button queue

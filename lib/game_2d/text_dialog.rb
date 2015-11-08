@@ -5,16 +5,23 @@ require 'game_2d/message'
 class TextDialog < Message
   BLINK_RATE = 16
 
-  def initialize(window, font = nil, initial_lines = nil)
+  def initialize(window, accept, cancel,
+                 font = nil, initial_lines = nil)
     font ||= Gosu::Font.new(window, "Courier", 16)
     initial_lines ||= ['']
+    initial_lines = initial_lines.split("\n", -1) if
+      initial_lines.is_a? String
+
     super(window, font, initial_lines)
+
     @select_color = Gosu::Color::CYAN
     @justify = :left
     @line_number = 0
     @cursor_pos = 0
     @select_line = 0
     @select_pos = 0
+    @accept = accept # proc that accepts a string
+    @cancel = cancel
   end
 
   def draw_line(line, line_number, x_pos, rel_x, x_min, x_max,
@@ -98,7 +105,13 @@ class TextDialog < Message
     when Gosu::KbDown then next_line
     when Gosu::KbBackspace then backspace
     when Gosu::KbDelete then delete
-    when Gosu::KbReturn, Gosu::KbEnter then enter
+    when Gosu::KbEscape then cancel
+    when Gosu::KbReturn, Gosu::KbEnter then
+      if ctrl
+        done
+      else
+        enter
+      end
     else
       if ctrl
         case id
@@ -113,6 +126,16 @@ class TextDialog < Message
     end
 
     void_selection if should_void_selection || !shift
+  end
+
+  def done
+    out = @lines.join("\n")
+    out << "\n" unless out.end_with? "\n"
+    @accept.call(out)
+  end
+
+  def cancel
+    @cancel.call
   end
 
   def selection?

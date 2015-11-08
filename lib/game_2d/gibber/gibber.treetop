@@ -1,0 +1,110 @@
+module Game2D
+grammar Gibber
+
+  rule program
+    ws* sequence ws* <Program>
+  end
+
+  rule sequence
+    first_stmt:statement rest:( ';' ws* stmt:statement )*
+    <Sequence>
+  end
+
+  rule statement
+    loop / conditional / expression
+  end
+
+  rule loop
+    'while' ws+ '(' ws* comparison ws* ')' ws+
+    '{' ws+ sequence ws+ '}'
+    <Loop>
+  end
+
+  rule conditional
+    'if' ws+ '(' ws* comparison ws* ')' ws+
+    '{' ws+ true_seq:sequence ws+ '}'
+    false_part:(
+      ws+ 'else' ws+ '{' ws+ false_seq:sequence ws+ '}'
+    )?
+    <Conditional>
+  end
+
+  rule expression
+    ternary / assignment / comparison / sum
+  end
+
+  rule ternary
+    comparison ws* '?' ws*
+    true_exp:expression ws* ':' ws*
+    false_exp:expression <Ternary>
+  end
+
+  rule assignment
+    identifier ws* ':=' ws* expression <Assignment>
+  end
+
+  rule sum
+    left:product ws* op:additive ws* right:sum <Math>
+    /
+    val:product <Val>
+  end
+
+  rule product
+    left:numeric ws* op:multiplicative ws* right:product <Math>
+    /
+    val:numeric <Val>
+  end
+
+  rule multiplicative
+    [*/%] <MathOperator>
+  end
+
+  rule additive
+    [+-] <MathOperator>
+  end
+
+  rule numeric
+    integer / identifier / parenthesized
+  end
+
+  rule parenthesized
+    '(' val:expression ')' <Val>
+  end
+
+  rule is_defined
+    'defined?' ws+ identifier <IsDefined>
+  end
+
+  rule identifier
+    [a-z_] [a-z0-9_]* <Identifier>
+  end
+
+  rule integer
+    [0-9]+ <Integer>
+  end
+
+  rule negation
+    '!' ws* comparison <Negation>
+  end
+
+  rule comparison
+    negation
+    /
+    left:sum ws* op:comparator ws* right:sum <Math>
+    /
+    boolean
+  end
+
+  rule comparator
+    ('==' / '!=' / '<=' / '>=' / '<' / '>') <MathOperator>
+  end
+
+  rule boolean
+    ('true' / 'false') <Boolean>
+  end
+
+  rule ws
+    [\s\n\r\t]
+  end
+end
+end

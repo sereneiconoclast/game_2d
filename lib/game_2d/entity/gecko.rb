@@ -2,6 +2,7 @@ require 'facets/kernel/try'
 require 'game_2d/entity'
 require 'game_2d/entity/pellet'
 require 'game_2d/entity/block'
+require 'game_2d/entity/droid'
 require 'game_2d/move/line_up'
 require 'game_2d/move/rise_up'
 require 'game_2d/player'
@@ -34,7 +35,7 @@ class Gecko < Entity
     Gosu::KbS            => :build,
   }
 
-  attr_reader :hp, :build_block_id
+  attr_reader :hp, :build_block_id, :droid_id
 
   def initialize(player_name = "<unknown>")
     super
@@ -42,7 +43,7 @@ class Gecko < Entity
     @player_name = player_name
     @score = 0
     @hp = MAX_HP
-    @build_block_id = nil
+    @build_block_id = @droid_id = nil
     @build_level = 0
   end
 
@@ -56,12 +57,23 @@ class Gecko < Entity
     @build_block_id = new_id.try(:to_sym)
   end
 
+  def droid_id=(new_id)
+    @droid_id = new_id.try(:to_sym)
+  end
+
   def building?; @build_block_id; end
+  def droid?; @droid_id; end
 
   def build_block
     return nil unless building?
     fail "Can't look up build_block when not in a space" unless @space
     @space[@build_block_id] or fail "Don't have build_block #{@build_block_id}"
+  end
+
+  def droid
+    return nil unless droid?
+    fail "Can't look up droid when not in a space" unless @space
+    @space[@droid_id] or fail "Don't have droid #{@droid_id}"
   end
 
   def harmed_by(other, damage=1)
@@ -86,12 +98,15 @@ class Gecko < Entity
 
     args = next_move
     case (current_move = args.delete(:move).to_sym)
-      when :slide_left, :slide_right, :brake, :flip, :build, :rise_up, :line_up
+      when :slide_left, :slide_right, :brake, :flip, :build,
+        :rise_up, :line_up, :make_droid
         send current_move unless falling
+      when :edit_droid
+        edit_droid args[:droid_id], args[:program]
       when :fire
         fire args[:x_vel], args[:y_vel]
       else
-        puts "Invalid move for #{self}: #{current_move}, #{args.inspect}"
+        warn "Invalid move for #{self}: #{current_move}, #{args.inspect}"
     end if args
 
     # Only go around corner if sitting on exactly one object
@@ -150,6 +165,35 @@ class Gecko < Entity
     end
   end
 
+  # Create the actual droid
+  def make_droid
+    if droid?
+      warn "Oops, already have a droid"
+    elsif building?
+      warn "Oops, can't make droid when building a block"
+    else
+      droid = Entity::Droid.new(@x, @y)
+      droid.owner_id = registry_id
+      if @space << droid # generates an ID
+        @droid_id = droid.registry_id
+      end
+    end
+  end
+
+  # Make the actual droid program change
+  def edit_droid(droid_id, program)
+    droid = @space[droid_id]
+    if droid.is_a? Entity::Droid
+      if droid.owner_id == self.registry_id
+        droid.program = program
+      else
+        warn "Droid #{droid} isn't owned by #{self}"
+      end
+    else
+      warn "Oops, #{droid_id} is a #{droid}, not a droid"
+    end
+  end
+
   def disown_block; @build_block_id, @build_level = nil, 0; end
 
   def check_for_disown_block
@@ -188,7 +232,7 @@ class Gecko < Entity
     [:fire, {:x_vel => x_vel, :y_vel => y_vel}]
   end
 
-  # Called by GameWindow
+  # Called by GameClient
   # Should return the move to be sent via ClientConnection
   # (or nil)
   # This is for queued keypresses, i.e. those that happen
@@ -196,6 +240,8 @@ class Gecko < Entity
   # for as long as held down
   def move_for_keypress(keypress)
     case keypress
+      when Gosu::KbSemicolon
+        return :make_droid unless droid?
       when Gosu::KbUp, Gosu::KbW
         return building? ? :rise_up : :flip
       when Gosu::KbF, Gosu::KbNumpad0
@@ -216,7 +262,7 @@ class Gecko < Entity
   def all_state
     # Player name goes first, so we can sort on that
     super.unshift(player_name).push(
-      score, @hp, build_block_id, @complex_move)
+      score, @hp, build_block_id, droid_id, @complex_move)
   end
 
   def as_json
@@ -225,6 +271,7 @@ class Gecko < Entity
       :score => score,
       :hp => @hp,
       :build_block => @build_block_id,
+      :droid => @droid_id,
       :complex_move => @complex_move.as_json
     )
   end
@@ -234,6 +281,7 @@ class Gecko < Entity
     @score = json[:score] if json[:score]
     @hp = json[:hp] if json[:hp]
     @build_block_id = json[:build_block].try(:to_sym) if json[:build_block]
+    @droid_id = json[:droid].try(:to_sym) if json[:droid]
     @complex_move = Serializable.from_json(json[:complex_move]) if json[:complex_move]
     super
   end
