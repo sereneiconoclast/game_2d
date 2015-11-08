@@ -6,81 +6,83 @@ module Game2D
 module Gibber
 
 module Program
-  def value(context)
-    sequence.value(context)
+  def value(this, context)
+    sequence.value(this, context)
   end
 end
 
 module Sequence
-  def value(context)
+  def value(this, context)
     statements = [first_stmt] + rest.elements.map(&:stmt)
     statements.each do |s|
-      context['_'] = s.value(context)
+      context['_'] = s.value(this, context)
     end
     context['_']
   end
 end
 
 module Loop
-  def value(context)
-    while comparison.value(context)
-      sequence.value(context)
+  def value(this, context)
+    while comparison.value(this, context)
+      sequence.value(this, context)
     end
   end
 end
 
 module Conditional
-  def value(context)
-    if comparison.value(context)
-      true_seq.value(context)
+  def value(this, context)
+    if comparison.value(this, context)
+      true_seq.value(this, context)
     elsif false_part.respond_to? :false_seq
-      false_part.false_seq.value(context)
+      false_part.false_seq.value(this, context)
     end
   end
 end
 
 module Ternary
-  def value(context)
+  def value(this, context)
     (
-      comparison.value(context) ? true_exp : false_exp
-    ).value(context)
+      comparison.value(this, context) ? true_exp : false_exp
+    ).value(this, context)
   end
 end
 
 module Assignment
-  def value(context)
+  def value(this, context)
     name = identifier.text_value.to_sym
-    context[name] = expression.value(context)
+    context[name] = expression.value(this, context)
   end
 end
 
 module Val
-  def value(context)
-    val.value(context)
+  def value(this, context)
+    val.value(this, context)
   end
 end
 
 module Math
-  def value(context)
-    op.value(context, left.value(context), right.value(context))
+  def value(this, context)
+    op.value(this, context,
+             left.value(this, context),
+             right.value(this, context))
   end
 end
 
 module MathOperator
-  def value(context, a, b)
+  def value(this, context, a, b)
     a.send(text_value.to_sym, b)
   end
 end
 
 module IsDefined
-  def value(context)
+  def value(this, context)
     name = identifier.text_value.to_sym
     context.include? name
   end
 end
 
 module Identifier
-  def value(context)
+  def value(this, context)
     name = text_value.to_sym
     fail "Uninitialized variable '#{name}'" unless
       context.include? name
@@ -88,20 +90,41 @@ module Identifier
   end
 end
 
+module Command
+  def value(this, context)
+    case elements.first.text_value
+    when 'accelerate' then
+      this.accelerate x_val.value(this, context),
+                      y_val.value(this, context)
+    else fail "Unexpected: #{text_value}"
+    end
+  end
+end
+
+module SpecialInteger
+  def value(this, context)
+    case text_value
+    when 'X' then this.x
+    when 'Y' then this.y
+    else fail "Unexpected: #{text_value}"
+    end
+  end
+end
+
 module Integer
-  def value(context)
+  def value(this, context)
     text_value.to_i
   end
 end
 
 module Negation
-  def value(context)
-    ! comparison.value(context)
+  def value(this, context)
+    ! comparison.value(this, context)
   end
 end
 
 module Boolean
-  def value(context)
+  def value(this, context)
     text_value == 'true'
   end
 end

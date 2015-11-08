@@ -12,7 +12,12 @@ grammar Gibber
   end
 
   rule statement
-    loop / conditional / expression
+    accelerate / loop / conditional / expression
+  end
+
+  rule accelerate
+    'accelerate' ws+ x_val:expression ','
+    ws+ y_val:expression <Command>
   end
 
   rule loop
@@ -65,7 +70,7 @@ grammar Gibber
   end
 
   rule numeric
-    integer / identifier / parenthesized
+    integer / special_integer / identifier / parenthesized
   end
 
   rule parenthesized
@@ -80,8 +85,12 @@ grammar Gibber
     [a-z_] [a-z0-9_]* <Identifier>
   end
 
+  rule special_integer
+    ( 'X' / 'Y' ) <SpecialInteger>
+  end
+
   rule integer
-    [0-9]+ <Integer>
+    '-'? [0-9]+ <Integer>
   end
 
   rule negation

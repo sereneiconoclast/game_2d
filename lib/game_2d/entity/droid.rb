@@ -16,6 +16,7 @@ class Droid < OwnedEntity
     @compiled_program = nil
     @parsed = nil
     @alert = nil
+    @falling = nil
   end
 
   def program=(new_program)
@@ -34,17 +35,26 @@ class Droid < OwnedEntity
 
   def sleep_now?; false; end
 
+  def should_fall?; empty_underneath?; end
+  def falling?; @falling; end
+
   def update
     fail "No space set for #{self}" unless @space
 
+    if @falling = should_fall?
+      space.fall(self)
+    end
+
     if @parsed
       begin
-        result = @parsed.value(@context)
+        result = @parsed.value(self, @context)
         @alert = result ? result.to_s : nil
       rescue => e
         @alert = e.to_s
       end
     end
+
+    move
   end
 
   def all_state; super.push(program, context); end
