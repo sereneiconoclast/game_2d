@@ -6,7 +6,8 @@ grammar Gibber
   end
 
   rule sequence
-    first_stmt:statement rest:( ';' ws* stmt:statement )*
+    first_stmt:statement
+    rest:( ';' ws+ stmt:statement )* ';'?
     <Sequence>
   end
 
@@ -91,6 +92,8 @@ grammar Gibber
     negation
     /
     left:sum ws* op:comparator ws* right:sum <Math>
+    /
+    is_defined
     /
     boolean
   end

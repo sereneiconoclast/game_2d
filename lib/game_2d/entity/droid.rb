@@ -7,33 +7,35 @@ class Entity
 
 class Droid < OwnedEntity
 
-  attr_accessor :program
-  attr_reader :context
+  attr_reader :program, :context
 
   def initialize(x=0, y=0)
     super(x, y)
     @program = '0'
     @context = nil
-    @old_program = nil
-    @parser = nil
+    @compiled_program = nil
     @parsed = nil
     @alert = nil
+  end
+
+  def program=(new_program)
+    return if @compiled_program == new_program && @parsed
+
+    @program = new_program
+    parser = Game2D::GibberParser.new
+    unless @parsed = parser.parse(@program)
+      @alert = "Parsing error at (#{parser.failure_line}, #{parser.failure_column})"
+      warn parser.failure_reason
+      return
+    end
+    @compiled_program = @program
+    @context = {}
   end
 
   def sleep_now?; false; end
 
   def update
     fail "No space set for #{self}" unless @space
-
-    if @program != @old_program
-      @old_program = @program
-      @context = {}
-      @parser = Game2D::GibberParser.new
-      unless @parsed = @parser.parse(@program)
-        puts "Parsing error at (#{@parser.failure_line}, #{@parser.failure_column})"
-        puts @parser.failure_reason
-      end
-    end
 
     if @parsed
       begin
@@ -49,7 +51,10 @@ class Droid < OwnedEntity
   def as_json; super.merge!(:program => program, :context => context); end
 
   def update_from_json(json)
-    @program = json[:program] if json[:program]
+    # Storing a new program will clear the context
+    # So we do that first
+    self.program = json[:program] if json[:program]
+
     @context = json[:context] if json[:context]
     super
   end

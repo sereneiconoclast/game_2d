@@ -49,7 +49,8 @@ end
 
 module Assignment
   def value(context)
-    context[identifier.text_value] = expression.value(context)
+    name = identifier.text_value.to_sym
+    context[name] = expression.value(context)
   end
 end
 
@@ -73,15 +74,17 @@ end
 
 module IsDefined
   def value(context)
-    context.include? text_value
+    name = identifier.text_value.to_sym
+    context.include? name
   end
 end
 
 module Identifier
   def value(context)
-    fail "Uninitialized variable '#{text_value}'" unless
-      context.include? text_value
-    context[text_value]
+    name = text_value.to_sym
+    fail "Uninitialized variable '#{name}'" unless
+      context.include? name
+    context[name]
   end
 end
 
