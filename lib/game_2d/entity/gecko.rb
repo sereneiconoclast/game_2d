@@ -185,7 +185,7 @@ class Gecko < Entity
     droid = @space[droid_id]
     if droid.is_a? Entity::Droid
       if droid.owner_id == self.registry_id
-        droid.program = program
+        droid.program! program
       else
         warn "Droid #{droid} isn't owned by #{self}"
       end

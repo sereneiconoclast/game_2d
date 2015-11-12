@@ -7,30 +7,32 @@ class Entity
 
 class Droid < OwnedEntity
 
-  attr_reader :program, :context
+  attr_reader :program, :heap
 
   def initialize(x=0, y=0)
     super(x, y)
     @program = '0'
-    @context = nil
     @compiled_program = nil
-    @parsed = nil
+    @vm = nil
     @alert = nil
     @falling = nil
   end
 
-  def program=(new_program)
+  def program!(new_program)
     return if @compiled_program == new_program && @parsed
 
     @program = new_program
     parser = Game2D::GibberParser.new
-    unless @parsed = parser.parse(@program)
+    unless parsed = parser.parse(@program)
       @alert = "Parsing error at (#{parser.failure_line}, #{parser.failure_column})"
       warn parser.failure_reason
+      @vm = nil
       return
     end
+    @vm = parsed.compile
+    @vm.owner = self
+    @vm.reset!
     @compiled_program = @program
-    @context = {}
   end
 
   def sleep_now?; false; end
@@ -45,27 +47,40 @@ class Droid < OwnedEntity
       space.fall(self)
     end
 
-    if @parsed
+    if @vm
+      @vm.reset! if @vm.done?
       begin
-        result = @parsed.value(self, @context)
+        @vm.execute(10)
+        result = @vm.last
         @alert = result ? result.to_s : nil
       rescue => e
         @alert = e.to_s
+        @vm.reset!
       end
     end
 
     move
   end
 
-  def all_state; super.push(program, context); end
-  def as_json; super.merge!(:program => program, :context => context); end
+  def all_state; super.push(@program, @vm); end
+  def as_json
+    super.merge!(
+      :program => @program,
+      :vm => (@vm ? @vm.as_json : nil)
+    )
+  end
 
   def update_from_json(json)
-    # Storing a new program will clear the context
-    # So we do that first
-    self.program = json[:program] if json[:program]
+    @program = json[:program] if json[:program]
 
-    @context = json[:context] if json[:context]
+    if json[:vm]
+      @vm = Game2D::Gibber::VM.new
+      @vm.update_from_json(json[:vm])
+      @vm.owner = self
+      @compiled_program = @program
+    else
+      @vm = @compiled_program = nil
+    end
     super
   end
 
